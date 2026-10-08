@@ -7,7 +7,7 @@ each user's timezone. Tables use ``<pre>`` and stay within ~32 characters for ph
 import re
 import unicodedata
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
 from html import escape
 
 from euroleague_notifier.models import (
@@ -259,17 +259,34 @@ def final_score(game: Game, box: BoxScore) -> str:
     return f"🏁 <b>Final</b>{ot_suffix(len(box.quarter_scores))} · {score}"
 
 
-def daily_schedule(games: list[Game]) -> str:
+def daily_schedule(games: list[Game], results_time: time | None = None) -> str:
     """Header of the daily schedule. The games themselves are its Follow buttons."""
     rounds = sorted({g.round for g in games if g.round is not None})
     round_text = f" · Round {rounds[0]}" if len(rounds) == 1 else ""
+    results = f" All results arrive at {results_time:%H:%M}." if results_time else ""
     return (
         f"📅 <b>Today's EuroLeague games</b>{round_text}\n\n"
         "Tap a game to follow it: a reminder before tip-off and a score card after every quarter, "
-        "with 📊 for the full stats. For the rest you'll just get the start and the final score."
+        f"with 📊 for the full stats.{results}"
     )
 
 
 def schedule_label(game: Game, following: bool) -> str:
     star = "⭐" if following else "☆"
     return f"{star} {{{{hm:{iso_z(game.tipoff)}}}}} {game.home.short_name} {DASH} {game.away.short_name}"
+
+
+def daily_results(games: list[Game], day: date, missing: int = 0) -> str:
+    """Header of the nightly results for the games of ``day``. The games are its 📊 buttons."""
+    rounds = sorted({g.round for g in games if g.round is not None})
+    round_text = f" · Round {rounds[0]}" if len(rounds) == 1 else ""
+    head = f"🏁 <b>EuroLeague results</b> · {day:%a} {day.day} {day:%b}{round_text}"
+    text = f"{head}\n\nTap a game for its box score."
+    if missing:
+        text += f"\n\n⚠️ {missing} result{'s' if missing > 1 else ''} not available yet: see /score."
+    return text
+
+
+def result_label(game: Game, box: BoxScore) -> str:
+    """Button label such as ``✅ PAN 88-80 FEN (OT)`` (en dash)."""
+    return f"✅ {code_score(game, box.home.points, box.away.points)}{ot_suffix(len(box.quarter_scores))}"

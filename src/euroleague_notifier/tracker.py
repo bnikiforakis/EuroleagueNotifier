@@ -1,8 +1,8 @@
 """Schedule sync, per-game tracking and notification decisions (ADR-008, ADR-014).
 
 Who gets what:
-- everyone: the daily schedule (one Follow button per game), and for games they don't follow a
-  tip-off message (with Follow) and the final score with a 📊 Stats button, all three silent;
+- everyone, silently: the daily schedule at noon (one Follow button per game) and the nightly
+  results after the day's games (one 📊 button per game). Nothing else about unfollowed games;
 - followers of a game (pressed Follow, or auto-follow by favourite team), with sound: a reminder
   before tip-off, the tip-off, a score card after every quarter and the final card.
 
@@ -13,7 +13,7 @@ task that sleeps until its reminder / tip-off, polls every ~45 s while live, the
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
@@ -28,9 +28,10 @@ log = logging.getLogger(__name__)
 
 KINDS = [
     {"value": "schedule", "label": "Daily schedule"},
-    {"value": "start", "label": "Game start"},
-    {"value": "final", "label": "Final scores"},
+    {"value": "results", "label": "Nightly results"},
 ]
+RESULTS_WINDOW = timedelta(hours=11)  # after RESULTS_TIME; later than that the summary is stale
+RESULTS_PATIENCE = timedelta(hours=2)  # how long the summary waits for an unfinished or missing game
 SCHEDULE_REFRESH = timedelta(hours=2)
 LOOP_INTERVAL = timedelta(minutes=10)
 LOOKAHEAD = timedelta(hours=26)  # start tracking (sleeping) tasks this far ahead
@@ -52,6 +53,12 @@ def _utcnow() -> datetime:
 COMMANDS = [{"command": "score", "description": "Live scores of today's games"}]
 
 
+def results_day(due: datetime) -> date:
+    """The game day a results summary sent at ``due`` covers: the evening before if it's sent
+    in the early hours (before noon), else that same day."""
+    return due.date() - timedelta(days=1) if due.hour < 12 else due.date()
+
+
 def build_manifest(clubs: list[Club], callback_url: str | None = None) -> dict:
     """Project manifest; with a ``callback_url`` PiButler also routes the ``COMMANDS`` to it."""
     unique = sorted({c.code: c for c in clubs}.values(), key=lambda c: c.short_name)
@@ -65,7 +72,9 @@ def build_manifest(clubs: list[Club], callback_url: str | None = None) -> dict:
                 "options": [{"value": c.code, "label": c.short_name} for c in unique],
             },
             {
-                "key": "kind",
+                # "daily", not the old "kind": selections saved for the old start/final options
+                # must not hide the new nightly results.
+                "key": "daily",
                 "label": "Notifications",
                 "options": KINDS,
                 "default": [k["value"] for k in KINDS],
@@ -105,8 +114,8 @@ def stats_button(full_report: str) -> dict:
     return {"label": "📊 Stats", "reveal": full_report}
 
 
-def followers(game: Game, following: bool = True) -> dict:
-    return {"topic": game.identifier, "following": following}
+def followers(game: Game) -> dict:
+    return {"topic": game.identifier, "following": True}
 
 
 class Notifier:
@@ -131,7 +140,10 @@ class Notifier:
         self._tracked: dict[str, Game] = {}  # the version of each game its task was started with
         self._games: dict[str, tuple[str, Game]] = {}  # identifier -> (competition, game)
         self._schedule_at: datetime | None = None
-        self._lagging: dict[str, datetime] = {}  # message key -> when its box score was first behind
+        self._lagging: dict[str, datetime] = {}
+        self._result_boxes: dict[
+            str, dict[str, BoxScore]
+        ] = {}  # results key -> finished box scores  # message key -> when its box score was first behind
 
     # --- main loop ---------------------------------------------------------------------------
 
@@ -191,6 +203,10 @@ class Notifier:
             await self.maybe_send_schedule()
         except Exception:
             log.exception("daily schedule failed")
+        try:
+            await self.maybe_send_results()
+        except Exception:
+            log.exception("nightly results failed")
         for gid, (comp, game) in self._games.items():
             running = gid in self._tasks and not self._tasks[gid].done()
             if running and self._tracked[gid].tipoff != game.tipoff and not await self._started(gid):
@@ -202,7 +218,7 @@ class Notifier:
                 )
                 self._tasks[gid].cancel()
                 running = False
-            if not running and self._should_track(game, now) and not await self._finished(gid):
+            if not running and self._should_track(game, now) and not await self.final_sent(gid):
                 log.info(
                     "%s: tracking %s vs %s (tip-off %s)",
                     gid,
@@ -229,11 +245,8 @@ class Notifier:
         return await self.events.has(f"{gid}:start") or await self.events.last_period(gid) > 0
 
     async def final_sent(self, gid: str) -> bool:
-        """True once either final message for the game has been sent."""
-        return await self.events.has(f"{gid}:final") or await self.events.has(f"{gid}:result")
-
-    async def _finished(self, gid: str) -> bool:
-        return await self.events.has(f"{gid}:final") and await self.events.has(f"{gid}:result")
+        """True once the game's final message has gone out (the game is over)."""
+        return await self.events.has(f"{gid}:final")
 
     # --- daily schedule ----------------------------------------------------------------------
 
@@ -264,12 +277,62 @@ class Notifier:
         ]
         await self._send(
             key,
-            reports.daily_schedule(upcoming),
-            tags={"kind": ["schedule"]},
+            reports.daily_schedule(upcoming, self.settings.results_time),
+            tags={"daily": ["schedule"]},
             topics=[topic(g) for g in upcoming],
             silent=True,
             buttons=buttons,
         )
+
+    # --- nightly results ---------------------------------------------------------------------
+
+    async def maybe_send_results(self) -> None:
+        """At RESULTS_TIME, one silent message with every result of that game day.
+
+        Waits (up to RESULTS_PATIENCE) for games that are still running or whose box score is
+        missing, and gives up once the summary would be stale (RESULTS_WINDOW).
+        """
+        tz = ZoneInfo(self.settings.digest_timezone)
+        local_now = self.now().astimezone(tz)
+        due = datetime.combine(local_now.date(), self.settings.results_time, tz)
+        if not due <= local_now < due + RESULTS_WINDOW:
+            return
+        day = results_day(due)
+        key = f"results:{day.isoformat()}"
+        played = sorted(
+            ((c, g) for c, g in self._games.values() if g.tipoff.astimezone(tz).date() == day),
+            key=lambda cg: (cg[1].tipoff, cg[1].code),
+        )
+        if not played or await self.events.has(key):
+            return
+        boxes = self._result_boxes.setdefault(key, {})
+        missing = [g for _, g in played if g.identifier not in boxes]
+        fetched = await asyncio.gather(
+            *(self.el.boxscore(g.season, g.code) for g in missing), return_exceptions=True
+        )
+        for game, box in zip(missing, fetched, strict=True):
+            over = await self.final_sent(game.identifier)  # the tracker saw the final buzzer
+            if isinstance(box, BoxScore) and (not box.live or over):
+                boxes[game.identifier] = box  # finished games don't change: fetch once
+        pending = [g for _, g in played if g.identifier not in boxes]
+        if pending and local_now < due + RESULTS_PATIENCE:
+            log.info("%s: waiting for %s", key, ", ".join(g.identifier for g in pending))
+            return
+        if not boxes:
+            return
+        finished = [(g, boxes[g.identifier]) for _, g in played if g.identifier in boxes]
+        buttons = [
+            [{"label": reports.result_label(g, box), "reveal": reports.final_report(g, box)}]
+            for g, box in finished
+        ]
+        await self._send(
+            key,
+            reports.daily_results([g for g, _ in finished], day, missing=len(pending)),
+            tags={"daily": ["results"]},
+            buttons=buttons,
+            silent=True,
+        )
+        self._result_boxes.pop(key, None)
 
     # --- per-game tracking -------------------------------------------------------------------
 
@@ -318,20 +381,16 @@ class Notifier:
         state = await self.el.period_state(season, game.code)
         if state.game_over:
             return await self._finals(competition, game, state)
-        if state.current_period >= 1 and state.ended_periods == 0:
-            # Followers hear it; everyone else gets it silently (no sound or vibration).
-            for key, following in ((f"{gid}:start", True), (f"{gid}:start:others", False)):
-                if not await self.events.has(key):
-                    await self._send(
-                        key,
-                        reports.tipoff(game),
-                        tags=None if following else {"kind": ["start"]},
-                        expires_at=reports.iso_z(self.now() + QUARTER_TTL),
-                        topics=[topic(game)],
-                        audience=followers(game, following),
-                        buttons=[[follow_button(game)]],
-                        silent=not following,
-                    )
+        started = state.current_period >= 1 and state.ended_periods == 0
+        if started and not await self.events.has(f"{gid}:start"):
+            await self._send(
+                f"{gid}:start",
+                reports.tipoff(game),
+                expires_at=reports.iso_z(self.now() + QUARTER_TTL),
+                topics=[topic(game)],
+                audience=followers(game),  # followers only
+                buttons=[[follow_button(game)]],
+            )
         period = state.ended_periods
         # Only the latest ended period: after a restart we don't replay old quarters.
         if period > await self.events.last_period(gid) and _another_period_follows(state):
@@ -354,7 +413,7 @@ class Notifier:
 
     async def _finals(self, competition: str, game: Game, state: PeriodState) -> bool:
         gid = game.identifier
-        if await self._finished(gid):
+        if await self.final_sent(gid):
             return True
         box = await self.el.boxscore(game.season, game.code)
         if box is None:
@@ -366,24 +425,13 @@ class Notifier:
         url = reports.game_url(game, competition)
         link = [{"label": "🔗 Game center", "url": url}] if url else []
         buttons = [[stats_button(full), *link]]
-        if not await self.events.has(f"{gid}:final"):
-            await self._send(
-                f"{gid}:final",
-                reports.final_card(game, box),
-                topics=[topic(game)],
-                audience=followers(game),
-                buttons=buttons,
-            )
-        if not await self.events.has(f"{gid}:result"):
-            await self._send(
-                f"{gid}:result",
-                reports.final_score(game, box),
-                tags={"kind": ["final"]},
-                topics=[topic(game)],
-                audience=followers(game, following=False),
-                buttons=buttons,
-                silent=True,  # games you don't follow never buzz
-            )
+        await self._send(
+            f"{gid}:final",
+            reports.final_card(game, box),
+            topics=[topic(game)],
+            audience=followers(game),
+            buttons=buttons,
+        )
         return True
 
     def _caught_up(self, key: str, caught_up: bool) -> bool:

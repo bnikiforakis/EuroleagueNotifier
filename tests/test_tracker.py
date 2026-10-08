@@ -3,7 +3,7 @@
 import asyncio
 import json
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
 import pytest
@@ -129,7 +129,7 @@ async def test_full_regulation_game(events):
     await notifier.track("E", GAME)
     gid = GAME.identifier
     reminder = f"reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}"
-    keys = (reminder, "start", "start:others", "p1", "p2", "p3", "final", "result")
+    keys = (reminder, "start", "p1", "p2", "p3", "final")
     assert butler.keys == [f"{gid}:{k}" for k in keys]
     assert clock() < TIPOFF + timedelta(minutes=30)  # stopped polling once final
 
@@ -139,38 +139,24 @@ async def test_who_gets_what(events):
     notifier, butler, _ = make(events, states)
     await notifier.track("E", GAME)
     gid, followers = GAME.identifier, {"topic": GAME.identifier, "following": True}
-    # followers only: reminder, quarter reports, full final
-    for suffix in (":00Z", ":p1", ":final"):  # reminder key ends with its tip-off time
-        assert butler.get(suffix)["audience"] == followers, suffix
-    # tip-off: followers with sound; everyone else silently (and only if they want game starts)
-    loud = next(n for n in butler.sent if n["key"] == f"{gid}:start")
-    quiet = butler.get(":start:others")
-    assert loud["audience"] == followers and not loud.get("silent")
-    assert quiet["audience"] == {"topic": gid, "following": False} and quiet["silent"]
-    assert quiet["tags"] == {"kind": ["start"]}
-    assert loud["buttons"][0][0]["follow"] == gid == quiet["buttons"][0][0]["follow"]
-    # only games you follow make a sound
+    # every live message is for followers only, with sound; nothing about unfollowed games
+    assert [n["key"].split(":", 1)[1].split(":")[0] for n in butler.sent] == [
+        "reminder",
+        "start",
+        "p1",
+        "final",
+    ]
     for n in butler.sent:
-        assert bool(n.get("silent")) == (n.get("audience") != followers), n["key"]
-    # non-followers: one-line result with a Stats button revealing the full report
-    result = butler.get(":result")
-    assert result["audience"] == {"topic": gid, "following": False}
-    assert result["tags"] == {"kind": ["final"]}
-    stats = result["buttons"][0][0]
-    assert stats["label"] == "📊 Stats" and "Team stats" in stats["reveal"]
-    assert "Team stats" not in result["text"]
-    # followers: compact cards too, with the same tables behind Stats
+        assert n["audience"] == followers and not n.get("silent"), n["key"]
+        assert n["topics"][0]["auto_follow"] == {"teams": [GAME.home.code, GAME.away.code]}
+    # compact cards with the tables behind Stats; follow toggle kept on the quarter card
     for suffix in (":p1", ":final"):
         card = butler.get(suffix)
         assert "<pre>" not in card["text"]
         assert card["buttons"][0][0]["label"] == "📊 Stats" and "<pre>" in card["buttons"][0][0]["reveal"]
-    assert butler.get(":final")["buttons"][0][0]["reveal"] == stats["reveal"]
-    assert butler.get(":p1")["buttons"][1][0]["follow"] == gid  # unfollow toggle kept
-    # every game message registers the topic, with auto-follow by team
-    assert all(
-        n["topics"][0]["auto_follow"] == {"teams": [GAME.home.code, GAME.away.code]} for n in butler.sent
-    )
-    # quarter reports go stale, finals don't
+    assert butler.get(":p1")["buttons"][1][0]["follow"] == gid
+    assert butler.get(":start")["buttons"][0][0]["follow"] == gid
+    # quarter cards go stale, the final doesn't
     assert butler.get(":p1")["expires_at"] and butler.get(":final")["expires_at"] is None
 
 
@@ -179,30 +165,30 @@ async def test_overtime_reports_q4_and_each_ot(events):
     notifier, butler, _ = make(events, states, start=TIPOFF)
     await notifier.track("E", GAME)
     gid = GAME.identifier
-    assert butler.keys == [f"{gid}:{k}" for k in ("p3", "p4", "p5", "final", "result")]
+    assert butler.keys == [f"{gid}:{k}" for k in ("p3", "p4", "p5", "final")]
 
 
 async def test_restart_mid_game_skips_already_sent_and_old_quarters(events):
     gid = GAME.identifier
-    for key in (f"reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}", "start", "start:others", "p1"):
+    for key in (f"reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}", "start", "p1"):
         await events.add(f"{gid}:{key}")
     notifier, butler, _ = make(events, [state(3), state(4, over=True)], start=TIPOFF + timedelta(minutes=70))
     await notifier.track("E", GAME)
-    assert butler.keys == [f"{gid}:p3", f"{gid}:final", f"{gid}:result"]
+    assert butler.keys == [f"{gid}:p3", f"{gid}:final"]
 
 
-async def test_restart_between_the_two_final_messages(events):
+async def test_restart_after_the_final_sends_nothing_more(events):
     gid = GAME.identifier
     await events.add(f"{gid}:final")
     notifier, butler, _ = make(events, [state(4, over=True)], start=TIPOFF + timedelta(hours=2))
     await notifier.track("E", GAME)
-    assert butler.keys == [f"{gid}:result"]
+    assert butler.keys == []
 
 
 async def test_late_start_skips_reminder_and_tipoff(events):
     notifier, butler, _ = make(events, [state(4, over=True)], start=TIPOFF + timedelta(minutes=5))
     await notifier.track("E", GAME)
-    assert butler.keys == [f"{GAME.identifier}:final", f"{GAME.identifier}:result"]
+    assert butler.keys == [f"{GAME.identifier}:final"]
 
 
 async def test_pibutler_outage_retries_without_losing_or_duplicating(events):
@@ -210,7 +196,7 @@ async def test_pibutler_outage_retries_without_losing_or_duplicating(events):
     butler.fail_next = 1
     await notifier.track("E", GAME)
     gid = GAME.identifier
-    assert butler.keys == [f"{gid}:p1", f"{gid}:final", f"{gid}:result"]
+    assert butler.keys == [f"{gid}:p1", f"{gid}:final"]
 
 
 async def test_gives_up_after_max_game_length(events):
@@ -230,7 +216,7 @@ async def test_daily_schedule_at_noon_with_follow_buttons(events):
     await notifier.maybe_send_schedule()
     assert butler.keys == ["schedule:2026-10-08"]
     digest = butler.sent[0]
-    assert digest["tags"] == {"kind": ["schedule"]} and digest["silent"]
+    assert digest["tags"] == {"daily": ["schedule"]} and digest["silent"]
     (button,) = digest["buttons"][0]
     assert button["follow"] == GAME.identifier and "{{hm:2026-10-08T16:00:00Z}}" in button["label"]
     assert "{{time:" not in digest["text"] + button["label"]  # today's schedule: times only
@@ -247,9 +233,10 @@ async def test_no_schedule_after_all_games_started(events):
 async def test_register_builds_manifest_from_clubs(events):
     notifier, butler, _ = make(events, [state(0)])
     await notifier.register()
-    teams, kind = butler.manifest["settings"]
+    teams, daily = butler.manifest["settings"]
+    assert daily["key"] == "daily"  # a new key: old "kind" selections can't hide the results
     assert len(teams["options"]) == 20 and teams["default"] == [] and "all_label" not in teams
-    assert kind["default"] == ["schedule", "start", "final"]
+    assert daily["default"] == ["schedule", "results"]
 
 
 def test_manifest_dedupes_clubs_across_competitions():
@@ -328,8 +315,8 @@ async def test_final_waits_for_lagging_box_score(events):
     )
     start = clock()
     await notifier.track("E", GAME)
-    assert butler.keys == [f"{gid}:final", f"{gid}:result"]
-    assert f" 96{DASH}98 " in butler.get(":result")["text"]
+    assert butler.keys == [f"{gid}:final"]
+    assert f" 96{DASH}98 " in butler.get(":final")["text"]
     assert clock() - start == timedelta(seconds=45)  # one extra poll
 
 
@@ -340,7 +327,7 @@ async def test_final_waits_while_box_score_is_live(events):
     )
     start = clock()
     await notifier.track("E", GAME)
-    assert butler.keys == [f"{GAME.identifier}:final", f"{GAME.identifier}:result"]
+    assert butler.keys == [f"{GAME.identifier}:final"]
     assert clock() - start == timedelta(seconds=45)
 
 
@@ -349,7 +336,7 @@ async def test_final_sent_anyway_when_box_score_never_catches_up(events):
     notifier, butler, clock = make(events, [over], start=TIPOFF + timedelta(hours=2), boxes=[lagging(94)])
     start = clock()
     await notifier.track("E", GAME)
-    assert butler.keys == [f"{GAME.identifier}:final", f"{GAME.identifier}:result"]
+    assert butler.keys == [f"{GAME.identifier}:final"]
     assert timedelta(minutes=3) <= clock() - start < timedelta(minutes=4)
 
 
@@ -358,7 +345,7 @@ async def test_quarter_report_waits_for_lagging_box_score(events):
     notifier, butler, _ = make(events, [q1, q1, state(4, over=True)], start=TIPOFF, boxes=[lagging(19), BOX])
     await notifier.track("E", GAME)
     gid = GAME.identifier
-    assert butler.keys == [f"{gid}:p1", f"{gid}:final", f"{gid}:result"]
+    assert butler.keys == [f"{gid}:p1", f"{gid}:final"]
     assert f" 21{DASH}14 " in butler.get(":p1")["text"].splitlines()[0]
     assert notifier.el.box_calls == 3  # lagging, caught up, final
 
@@ -374,7 +361,7 @@ async def test_no_period_report_right_before_the_final(events):
     notifier, butler, _ = make(events, states, start=TIPOFF)
     await notifier.track("E", GAME)
     gid = GAME.identifier
-    assert butler.keys == [f"{gid}:p3", f"{gid}:p4", f"{gid}:final", f"{gid}:result"]
+    assert butler.keys == [f"{gid}:p3", f"{gid}:p4", f"{gid}:final"]
 
 
 async def test_reminder_retries_until_pibutler_accepts(events):
@@ -476,3 +463,94 @@ async def test_waiting_tracker_notices_host_sleep_within_a_minute(events):
     await notifier.track("E", GAME)
     assert woke <= polled_at[0] <= woke + timedelta(minutes=1)
     assert butler.keys[0] == f"{GAME.identifier}:start"  # reminder skipped (too late), live polling ran
+
+
+# --- nightly results -------------------------------------------------------------------------
+
+AFTER_ONE_AM = datetime(2026, 10, 8, 22, 30, tzinfo=UTC)  # 01:30 Athens on Oct 9: results for Oct 8
+
+
+async def test_nightly_results_after_one_am_with_a_stats_button_per_game(events):
+    other = replace(GAME, code=98, tipoff=TIPOFF + timedelta(hours=2))
+    notifier, butler, _ = make(events, [PRE], start=AFTER_ONE_AM, games=[other, GAME])
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()
+    await notifier.maybe_send_results()  # once only
+    assert butler.keys == ["results:2026-10-08"]
+    msg = butler.sent[0]
+    assert msg["silent"] and msg["tags"] == {"daily": ["results"]} and msg.get("audience") is None
+    assert "EuroLeague results</b> · Thu 8 Oct" in msg["text"]  # the games' day, not "today"
+    (first,), (second,) = msg["buttons"]
+    assert first["label"].startswith(f"✅ {GAME.home.code} ")  # in tip-off order
+    assert "Team stats" in first["reveal"] and "Team stats" in second["reveal"]
+
+
+async def test_no_results_before_one_am(events):
+    notifier, butler, _ = make(events, [PRE], start=AFTER_ONE_AM - timedelta(hours=1))
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()
+    assert butler.keys == []
+
+
+async def test_results_wait_for_a_game_still_running(events):
+    notifier, butler, _ = make(events, [PRE], start=AFTER_ONE_AM, boxes=[lagging(80, live=True), BOX])
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()
+    assert butler.keys == []  # still live at 01:30
+    await notifier.maybe_send_results()
+    assert butler.keys == ["results:2026-10-08"]
+
+
+async def test_stale_results_are_skipped(events):
+    notifier, butler, _ = make(events, [PRE], start=AFTER_ONE_AM + timedelta(hours=11))
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()
+    assert butler.keys == []
+
+
+async def test_no_results_on_a_day_without_games(events):
+    notifier, butler, _ = make(events, [PRE], start=AFTER_ONE_AM + timedelta(days=3))
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()
+    assert butler.keys == []
+
+
+async def test_results_wait_for_a_missing_box_score_then_send_what_they_have(events):
+    other = replace(GAME, code=98, tipoff=TIPOFF + timedelta(hours=2))
+    notifier, butler, clock = make(events, [PRE], start=AFTER_ONE_AM, games=[GAME, other], boxes=[None])
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()
+    assert butler.keys == []  # waits for the missing games
+    clock.t = AFTER_ONE_AM + timedelta(hours=2)  # past the patience: send with a note
+    notifier.el.boxes = [BOX, None]
+    await notifier.maybe_send_results()
+    assert butler.keys == ["results:2026-10-08"]
+    assert len(butler.sent[0]["buttons"]) == 1 and "1 result not available yet" in butler.sent[0]["text"]
+
+
+async def test_results_trust_the_final_buzzer_over_a_stuck_live_flag(events):
+    await events.add(f"{GAME.identifier}:final")
+    notifier, butler, _ = make(events, [PRE], start=AFTER_ONE_AM, boxes=[lagging(96, live=True)])
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()
+    assert butler.keys == ["results:2026-10-08"]
+
+
+async def test_finished_box_scores_are_fetched_once_while_waiting(events):
+    other = replace(GAME, code=98, tipoff=TIPOFF + timedelta(hours=2))
+    notifier, butler, _ = make(
+        events, [PRE], start=AFTER_ONE_AM, games=[GAME, other], boxes=[BOX, lagging(80, live=True), BOX]
+    )
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()  # GAME done, other still live
+    calls = notifier.el.box_calls
+    await notifier.maybe_send_results()  # only the live one is fetched again
+    assert notifier.el.box_calls == calls + 1 and butler.keys == ["results:2026-10-08"]
+
+
+async def test_evening_results_time_covers_the_same_day(events):
+    notifier, butler, _ = make(events, [PRE], start=datetime(2026, 10, 8, 20, 45, tzinfo=UTC))
+    notifier.settings = replace(notifier.settings, results_time=time(23, 30))
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()  # 23:45 Athens on Oct 8
+    assert butler.keys == ["results:2026-10-08"]

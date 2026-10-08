@@ -137,6 +137,9 @@ def test_follow_model_messages():
     assert "96" in result and "98" in result and "<b>LDLC ASVEL</b>" in result and "Team stats" not in result
     assert schedule_label(game, False).startswith("☆ {{hm:") and schedule_label(game, True).startswith("⭐")
     assert "Round" in daily_schedule([game]) and "{{" not in daily_schedule([game])
+    from datetime import time
+
+    assert "All results arrive at 01:00." in daily_schedule([game], time(1, 0))
 
 
 def test_shooting_shows_made_attempted_and_percentage():
