@@ -1,0 +1,964 @@
+{
+ "data": [
+  {
+   "id": "95652fba-7c05-46d3-82ba-abfc3699a449",
+   "identifier": "E2026_35",
+   "gameCode": 35,
+   "season": {
+    "name": "EuroLeague 2026-27",
+    "code": "E2026",
+    "alias": "2026-27",
+    "competitionCode": "E",
+    "year": 2026,
+    "startDate": "2026-07-01T00:00:00"
+   },
+   "group": {
+    "id": "c3243224-039c-4e93-9e16-12a7f4b2d383",
+    "order": 1,
+    "name": "Group Regular Season",
+    "rawName": "Regular Season"
+   },
+   "phaseType": {
+    "code": "RS",
+    "alias": "REGULAR SEASON",
+    "name": "Regular Season",
+    "isGroupPhase": true
+   },
+   "round": 4,
+   "roundAlias": "Round 4",
+   "roundName": "Round 4",
+   "played": false,
+   "date": "2026-10-08T20:45:00",
+   "confirmedDate": true,
+   "confirmedHour": true,
+   "localTimeZone": 2,
+   "localDate": "2026-10-08T20:45:00",
+   "utcDate": "2026-10-08T18:45:00Z",
+   "local": {
+    "club": {
+     "code": "MAD",
+     "name": "Real Madrid",
+     "abbreviatedName": "Real Madrid",
+     "editorialName": "Real",
+     "tvCode": "RMB",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/371b0d9b-9250-4c09-bda7-0686cf024657.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "road": {
+    "club": {
+     "code": "PAR",
+     "name": "Partizan Mozzart Bet Belgrade",
+     "abbreviatedName": "Partizan",
+     "editorialName": "Partizan",
+     "tvCode": "PAR",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/2681304e-77dd-4331-88b1-683078c0fb49.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "audience": 0,
+   "audienceConfirmed": false,
+   "socialFeed": "",
+   "operationsCode": null,
+   "referee1": {
+    "code": "OJDL",
+    "name": "MOGULKOC, EMIN",
+    "alias": "MOGULKOC, E.",
+    "country": {
+     "code": "TUR",
+     "name": "Turkiye"
+    },
+    "images": {
+     "verticalSmall": "885ubsvbyuo7gpso"
+    },
+    "active": true
+   },
+   "referee2": {
+    "code": "OJIT",
+    "name": "KOLJENSIC, MILOS ",
+    "alias": "KOLJENSIC, M.",
+    "country": {
+     "code": "MNE",
+     "name": "Montenegro"
+    },
+    "images": {
+     "verticalSmall": "8844wrt6a74iumoi"
+    },
+    "active": true
+   },
+   "referee3": {
+    "code": "OJCI",
+    "name": "KOWALSKI, MARCIN",
+    "alias": "KOWALSKI, M.",
+    "country": {
+     "code": "POL",
+     "name": "Poland"
+    },
+    "images": {
+     "verticalSmall": "88458wn9bg4cds6q"
+    },
+    "active": true
+   },
+   "referee4": null,
+   "venue": {
+    "name": "MOVISTAR ARENA",
+    "code": "ATI7",
+    "capacity": 13109,
+    "address": "Avenida de Felipe II 1, 28009, Madrid",
+    "images": {
+     "medium": null
+    },
+    "active": true,
+    "notes": ""
+   },
+   "isNeutralVenue": false,
+   "gameStatus": "Confirmed",
+   "winner": null
+  },
+  {
+   "id": "0f0ce013-9f59-4ca0-8f46-091da6998875",
+   "identifier": "E2026_34",
+   "gameCode": 34,
+   "season": {
+    "name": "EuroLeague 2026-27",
+    "code": "E2026",
+    "alias": "2026-27",
+    "competitionCode": "E",
+    "year": 2026,
+    "startDate": "2026-07-01T00:00:00"
+   },
+   "group": {
+    "id": "c3243224-039c-4e93-9e16-12a7f4b2d383",
+    "order": 1,
+    "name": "Group Regular Season",
+    "rawName": "Regular Season"
+   },
+   "phaseType": {
+    "code": "RS",
+    "alias": "REGULAR SEASON",
+    "name": "Regular Season",
+    "isGroupPhase": true
+   },
+   "round": 4,
+   "roundAlias": "Round 4",
+   "roundName": "Round 4",
+   "played": false,
+   "date": "2026-10-08T20:30:00",
+   "confirmedDate": true,
+   "confirmedHour": true,
+   "localTimeZone": 2,
+   "localDate": "2026-10-08T20:30:00",
+   "utcDate": "2026-10-08T18:30:00Z",
+   "local": {
+    "club": {
+     "code": "PAM",
+     "name": "Valencia Basket",
+     "abbreviatedName": "Valencia",
+     "editorialName": "Valencia",
+     "tvCode": "VBC",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.cortextech.io/1dU3kpCqReRp93/1BSdBWIjChWbHL/bc3e00b2-fea4-40be-a7ec-1e633129bde3.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "road": {
+    "club": {
+     "code": "HTA",
+     "name": "Hapoel IBI Tel Aviv",
+     "abbreviatedName": "Hapoel TLV",
+     "editorialName": "Hapoel",
+     "tvCode": "HTA",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/cbb1c3ad-03d5-426a-b5ef-2832a4eee484.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "audience": 0,
+   "audienceConfirmed": false,
+   "socialFeed": "",
+   "operationsCode": null,
+   "referee1": {
+    "code": "OJIL",
+    "name": "HORDOV, TOMISLAV ",
+    "alias": "HORDOV, T.",
+    "country": {
+     "code": "CRO",
+     "name": "Croatia"
+    },
+    "images": {
+     "verticalSmall": "883i3djf5vlm949m"
+    },
+    "active": true
+   },
+   "referee2": {
+    "code": "OAAX",
+    "name": "ZAMOJSKI, JAKUB",
+    "alias": "ZAMOJSKI, J.",
+    "country": {
+     "code": "POL",
+     "name": "Poland"
+    },
+    "images": {
+     "verticalSmall": "886d5v4r7bejwode"
+    },
+    "active": true
+   },
+   "referee3": {
+    "code": "QJMI",
+    "name": "BOUBERT, MAXIME",
+    "alias": "BOUBERT, M.",
+    "country": {
+     "code": "FRA",
+     "name": "France"
+    },
+    "images": {
+     "verticalSmall": "bugv8rk58e6ulyph"
+    },
+    "active": true
+   },
+   "referee4": null,
+   "venue": {
+    "name": "ROIG ARENA",
+    "code": "AVJ1",
+    "capacity": 15600,
+    "address": "C/ del Bomber Ramon Duart, 12, Quatre Carreres, 46013 Valencia ",
+    "images": {
+     "medium": null
+    },
+    "active": true,
+    "notes": ""
+   },
+   "isNeutralVenue": false,
+   "gameStatus": "Confirmed",
+   "winner": null
+  },
+  {
+   "id": "7a7a48b2-3461-46bc-9f1b-9e96ac2c6618",
+   "identifier": "E2026_36",
+   "gameCode": 36,
+   "season": {
+    "name": "EuroLeague 2026-27",
+    "code": "E2026",
+    "alias": "2026-27",
+    "competitionCode": "E",
+    "year": 2026,
+    "startDate": "2026-07-01T00:00:00"
+   },
+   "group": {
+    "id": "c3243224-039c-4e93-9e16-12a7f4b2d383",
+    "order": 1,
+    "name": "Group Regular Season",
+    "rawName": "Regular Season"
+   },
+   "phaseType": {
+    "code": "RS",
+    "alias": "REGULAR SEASON",
+    "name": "Regular Season",
+    "isGroupPhase": true
+   },
+   "round": 4,
+   "roundAlias": "Round 4",
+   "roundName": "Round 4",
+   "played": false,
+   "date": "2026-10-08T20:15:00",
+   "confirmedDate": true,
+   "confirmedHour": true,
+   "localTimeZone": 3,
+   "localDate": "2026-10-08T21:15:00",
+   "utcDate": "2026-10-08T18:15:00Z",
+   "local": {
+    "club": {
+     "code": "PAN",
+     "name": "Panathinaikos AKTOR Athens",
+     "abbreviatedName": "Panathinaikos",
+     "editorialName": "Panathinaikos",
+     "tvCode": "PAO",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/e3dff28a-9ec6-4faf-9d96-ecbc68f75780.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "road": {
+    "club": {
+     "code": "ULK",
+     "name": "Fenerbahce Tarfin Istanbul",
+     "abbreviatedName": "Fenerbahce",
+     "editorialName": "Fenerbahce",
+     "tvCode": "FBT",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.cortextech.io/1dU3kpCqReRp93/1BSdBWIjCiezrk/aa39750a-6203-49ee-a87d-edd0c6f0397d.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "audience": 0,
+   "audienceConfirmed": false,
+   "socialFeed": "",
+   "operationsCode": null,
+   "referee1": {
+    "code": "OACI",
+    "name": "BELOSEVIC, ILIJA",
+    "alias": "BELOSEVIC, I.",
+    "country": {
+     "code": "SRB",
+     "name": "Serbia"
+    },
+    "images": {
+     "verticalSmall": "ayrnxwrdng99dusy"
+    },
+    "active": true
+   },
+   "referee2": {
+    "code": "OJIZ",
+    "name": "PERUGA, CARLOS",
+    "alias": "PERUGA, C.",
+    "country": {
+     "code": "ESP",
+     "name": "Spain"
+    },
+    "images": {
+     "verticalSmall": "885qkoqdo5npvomj"
+    },
+    "active": true
+   },
+   "referee3": {
+    "code": "OJLP",
+    "name": "SUKYS, ARTURAS",
+    "alias": "SUKYS, A.",
+    "country": {
+     "code": "LTU",
+     "name": "Lithuania"
+    },
+    "images": {
+     "verticalSmall": "89oview3i6xl9tp4"
+    },
+    "active": true
+   },
+   "referee4": null,
+   "venue": {
+    "name": "TELEKOM CENTER ATHENS",
+    "code": "AUM6",
+    "capacity": 18500,
+    "address": "37 Kifisias Avenue, 15123 Marousi",
+    "images": {
+     "medium": null
+    },
+    "active": true,
+    "notes": ""
+   },
+   "isNeutralVenue": false,
+   "gameStatus": "Confirmed",
+   "winner": null
+  },
+  {
+   "id": "e75c2c43-c74e-4bfe-8cee-f5fcabb4f7cd",
+   "identifier": "E2026_33",
+   "gameCode": 33,
+   "season": {
+    "name": "EuroLeague 2026-27",
+    "code": "E2026",
+    "alias": "2026-27",
+    "competitionCode": "E",
+    "year": 2026,
+    "startDate": "2026-07-01T00:00:00"
+   },
+   "group": {
+    "id": "c3243224-039c-4e93-9e16-12a7f4b2d383",
+    "order": 1,
+    "name": "Group Regular Season",
+    "rawName": "Regular Season"
+   },
+   "phaseType": {
+    "code": "RS",
+    "alias": "REGULAR SEASON",
+    "name": "Regular Season",
+    "isGroupPhase": true
+   },
+   "round": 4,
+   "roundAlias": "Round 4",
+   "roundName": "Round 4",
+   "played": false,
+   "date": "2026-10-08T20:00:00",
+   "confirmedDate": true,
+   "confirmedHour": true,
+   "localTimeZone": 2,
+   "localDate": "2026-10-08T20:00:00",
+   "utcDate": "2026-10-08T18:00:00Z",
+   "local": {
+    "club": {
+     "code": "MUN",
+     "name": "FC Bayern Munich",
+     "abbreviatedName": "Bayern Munich",
+     "editorialName": "Bayern",
+     "tvCode": "BAY",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/817b0e58-d595-4b09-ab0b-1e7cc26249ff.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "road": {
+    "club": {
+     "code": "VIR",
+     "name": "Virtus Bologna",
+     "abbreviatedName": "Virtus Bologna",
+     "editorialName": "Virtus",
+     "tvCode": "VIR",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.cortextech.io/1dU3kpCqReRp93/1BSdBWIjCiezvk/a92d4c3b-9f9c-4163-8a10-bcf8fc15893e.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "audience": 0,
+   "audienceConfirmed": false,
+   "socialFeed": "",
+   "operationsCode": null,
+   "referee1": {
+    "code": "QJLV",
+    "name": "VILIUS, GYTIS",
+    "alias": "VILIUS, G.",
+    "country": {
+     "code": "LTU",
+     "name": "Lithuania"
+    },
+    "images": {
+     "verticalSmall": "94qq99ojsab3pjud"
+    },
+    "active": true
+   },
+   "referee2": {
+    "code": "OJFV",
+    "name": "TRAWICKI, TOMASZ",
+    "alias": "TRAWICKI, T.",
+    "country": {
+     "code": "POL",
+     "name": "Poland"
+    },
+    "images": {
+     "verticalSmall": "886bu66ca97fclyr"
+    },
+    "active": true
+   },
+   "referee3": {
+    "code": "OJLI",
+    "name": "PEERANDI, RAIN",
+    "alias": "PEERANDI, R.",
+    "country": {
+     "code": "EST",
+     "name": "Estonia"
+    },
+    "images": {
+     "verticalSmall": "885xbuej88hcbpxv"
+    },
+    "active": true
+   },
+   "referee4": null,
+   "venue": {
+    "name": "SAP GARDEN",
+    "code": "AVE1",
+    "capacity": 11500,
+    "address": "Toni-Merkens-Weg 4, 80809 Munich - Germany",
+    "images": {
+     "medium": null
+    },
+    "active": true,
+    "notes": ""
+   },
+   "isNeutralVenue": false,
+   "gameStatus": "Confirmed",
+   "winner": null
+  },
+  {
+   "id": "9e510885-6fb0-4891-b5a3-fc9072b9fa41",
+   "identifier": "E2026_37",
+   "gameCode": 37,
+   "season": {
+    "name": "EuroLeague 2026-27",
+    "code": "E2026",
+    "alias": "2026-27",
+    "competitionCode": "E",
+    "year": 2026,
+    "startDate": "2026-07-01T00:00:00"
+   },
+   "group": {
+    "id": "c3243224-039c-4e93-9e16-12a7f4b2d383",
+    "order": 1,
+    "name": "Group Regular Season",
+    "rawName": "Regular Season"
+   },
+   "phaseType": {
+    "code": "RS",
+    "alias": "REGULAR SEASON",
+    "name": "Regular Season",
+    "isGroupPhase": true
+   },
+   "round": 4,
+   "roundAlias": "Round 4",
+   "roundName": "Round 4",
+   "played": false,
+   "date": "2026-10-08T18:00:00",
+   "confirmedDate": true,
+   "confirmedHour": true,
+   "localTimeZone": 4,
+   "localDate": "2026-10-08T20:00:00",
+   "utcDate": "2026-10-08T16:00:00Z",
+   "local": {
+    "club": {
+     "code": "DUB",
+     "name": "Dubai Basketball",
+     "abbreviatedName": "Dubai",
+     "editorialName": "Dubai",
+     "tvCode": "DUB",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/1efae090-16e2-4963-ae47-4b94f249c244.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "road": {
+    "club": {
+     "code": "RED",
+     "name": "Crvena Zvezda Meridianbet Belgrade",
+     "abbreviatedName": "Crvena Zvezda",
+     "editorialName": "Crvena",
+     "tvCode": "CZV",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/d2eef4a8-62df-4fdd-9076-276004268515.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "audience": 0,
+   "audienceConfirmed": false,
+   "socialFeed": "",
+   "operationsCode": null,
+   "referee1": {
+    "code": "OADJ",
+    "name": "PUKL,SASA",
+    "alias": "PUKL,S.",
+    "country": {
+     "code": "SLO",
+     "name": "Slovenia"
+    },
+    "images": {
+     "verticalSmall": "8863itxgormdtqhs"
+    },
+    "active": true
+   },
+   "referee2": {
+    "code": "013173",
+    "name": "ATTARD, MANUEL",
+    "alias": "ATTARD, M.",
+    "country": {
+     "code": "ITA",
+     "name": "Italy"
+    },
+    "images": {
+     "verticalSmall": null
+    },
+    "active": true
+   },
+   "referee3": {
+    "code": "QJMU",
+    "name": "PADROS, ARNAU",
+    "alias": "PADROS, A.",
+    "country": {
+     "code": "ESP",
+     "name": "Spain"
+    },
+    "images": {
+     "verticalSmall": null
+    },
+    "active": true
+   },
+   "referee4": null,
+   "venue": {
+    "name": "COCA-COLA ARENA",
+    "code": "ACA4",
+    "capacity": 13221,
+    "address": "Al Wasl - \u0633\u0679\u06cc \u0648\u0627\u06a9 - Dubai - United Arab Emirates",
+    "images": {
+     "medium": null
+    },
+    "active": true,
+    "notes": ""
+   },
+   "isNeutralVenue": false,
+   "gameStatus": "Confirmed",
+   "winner": null
+  },
+  {
+   "id": "4d7ec43e-3db1-455e-ab72-2bf633dfd512",
+   "identifier": "E2026_32",
+   "gameCode": 32,
+   "season": {
+    "name": "EuroLeague 2026-27",
+    "code": "E2026",
+    "alias": "2026-27",
+    "competitionCode": "E",
+    "year": 2026,
+    "startDate": "2026-07-01T00:00:00"
+   },
+   "group": {
+    "id": "c3243224-039c-4e93-9e16-12a7f4b2d383",
+    "order": 1,
+    "name": "Group Regular Season",
+    "rawName": "Regular Season"
+   },
+   "phaseType": {
+    "code": "RS",
+    "alias": "REGULAR SEASON",
+    "name": "Regular Season",
+    "isGroupPhase": true
+   },
+   "round": 4,
+   "roundAlias": "Round 4",
+   "roundName": "Round 4",
+   "played": false,
+   "date": "2026-10-08T18:00:00",
+   "confirmedDate": true,
+   "confirmedHour": true,
+   "localTimeZone": 2,
+   "localDate": "2026-10-08T18:00:00",
+   "utcDate": "2026-10-08T16:00:00Z",
+   "local": {
+    "club": {
+     "code": "TEL",
+     "name": "Maccabi Rapyd Tel Aviv",
+     "abbreviatedName": "Maccabi",
+     "editorialName": "Maccabi",
+     "tvCode": "MTA",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.cortextech.io/1b533342-78f5-4932-b714-a7d80b5826b5.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "road": {
+    "club": {
+     "code": "MIL",
+     "name": "Armani Olimpia Milan",
+     "abbreviatedName": "Milan",
+     "editorialName": "Milan",
+     "tvCode": "MIL",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.cortextech.io/1dU3kpCqReRp93/1BSdBWIjChWbHH/5c2f0ab6-f86a-4df0-b2f3-f9ab92f7267b.png"
+     }
+    },
+    "score": 0,
+    "standingsScore": 0,
+    "partials": {
+     "partials1": 0,
+     "partials2": 0,
+     "partials3": 0,
+     "partials4": 0,
+     "extraPeriods": {}
+    }
+   },
+   "audience": 0,
+   "audienceConfirmed": false,
+   "socialFeed": "",
+   "operationsCode": null,
+   "referee1": {
+    "code": "OJDF",
+    "name": "LATISEVS, OLEGS",
+    "alias": "LATISEVS, O.",
+    "country": {
+     "code": "LAT",
+     "name": "Latvia"
+    },
+    "images": {
+     "verticalSmall": "8845j7vs5indngbw"
+    },
+    "active": true
+   },
+   "referee2": {
+    "code": "OJFQ",
+    "name": "FOUFIS, IOANNIS",
+    "alias": "FOUFIS, I.",
+    "country": {
+     "code": "GRE",
+     "name": "Greece"
+    },
+    "images": {
+     "verticalSmall": "87yuyhwl9wgoi74r"
+    },
+    "active": true
+   },
+   "referee3": {
+    "code": "OJLJ",
+    "name": "PANTHER, ANNE",
+    "alias": "PANTHER, A.",
+    "country": {
+     "code": "GER",
+     "name": "Germany"
+    },
+    "images": {
+     "verticalSmall": "885wcxfmwtcvkvfd"
+    },
+    "active": true
+   },
+   "referee4": null,
+   "venue": {
+    "name": "ALEKSANDAR NIKOLIC HALL",
+    "code": "AUF4",
+    "capacity": 8000,
+    "address": "Carlija Caplina 39, Belgrade 11000, Serbia",
+    "images": {
+     "medium": null
+    },
+    "active": true,
+    "notes": ""
+   },
+   "isNeutralVenue": false,
+   "gameStatus": "Confirmed",
+   "winner": null
+  },
+  {
+   "id": "17b46ddd-0884-406c-97a0-13f60cae97cc",
+   "identifier": "E2026_31",
+   "gameCode": 31,
+   "season": {
+    "name": "EuroLeague 2026-27",
+    "code": "E2026",
+    "alias": "2026-27",
+    "competitionCode": "E",
+    "year": 2026,
+    "startDate": "2026-07-01T00:00:00"
+   },
+   "group": {
+    "id": "c3243224-039c-4e93-9e16-12a7f4b2d383",
+    "order": 1,
+    "name": "Group Regular Season",
+    "rawName": "Regular Season"
+   },
+   "phaseType": {
+    "code": "RS",
+    "alias": "REGULAR SEASON",
+    "name": "Regular Season",
+    "isGroupPhase": true
+   },
+   "round": 4,
+   "roundAlias": "Round 4",
+   "roundName": "Round 4",
+   "played": true,
+   "date": "2026-10-07T20:45:00",
+   "confirmedDate": true,
+   "confirmedHour": true,
+   "localTimeZone": 2,
+   "localDate": "2026-10-07T20:45:00",
+   "utcDate": "2026-10-07T18:45:00Z",
+   "local": {
+    "club": {
+     "code": "PRS",
+     "name": "Paris Basketball",
+     "abbreviatedName": "Paris",
+     "editorialName": "Paris",
+     "tvCode": "PBB",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/a033e5b3-0de7-48a3-98d9-d9a4b9df1f39.png"
+     }
+    },
+    "score": 96,
+    "standingsScore": 96,
+    "partials": {
+     "partials1": 21,
+     "partials2": 22,
+     "partials3": 34,
+     "partials4": 19,
+     "extraPeriods": {}
+    }
+   },
+   "road": {
+    "club": {
+     "code": "ASV",
+     "name": "LDLC ASVEL Villeurbanne",
+     "abbreviatedName": "LDLC ASVEL",
+     "editorialName": "ASVEL",
+     "tvCode": "ASV",
+     "isVirtual": false,
+     "images": {
+      "crest": "https://media-cdn.incrowdsports.com/e33c6d1a-95ca-4dbc-b8cb-0201812104cc.png"
+     }
+    },
+    "score": 98,
+    "standingsScore": 98,
+    "partials": {
+     "partials1": 14,
+     "partials2": 32,
+     "partials3": 28,
+     "partials4": 24,
+     "extraPeriods": {}
+    }
+   },
+   "audience": 6628,
+   "audienceConfirmed": true,
+   "socialFeed": "",
+   "operationsCode": null,
+   "referee1": {
+    "code": "OACA",
+    "name": "RYZHYK, BORYS",
+    "alias": "RYZHYK, B.",
+    "country": {
+     "code": "UKR",
+     "name": "Ukraine"
+    },
+    "images": {
+     "verticalSmall": "8868n7x43bynj5fi"
+    },
+    "active": true
+   },
+   "referee2": {
+    "code": "OJLN",
+    "name": "RACYS, SAULIUS",
+    "alias": "RACYS, S.",
+    "country": {
+     "code": "SWE",
+     "name": "Sweden"
+    },
+    "images": {
+     "verticalSmall": "8863qecdbweor58t"
+    },
+    "active": true
+   },
+   "referee3": {
+    "code": "QJMA",
+    "name": "TSAROUCHA, VASILIKI",
+    "alias": "TSAROUCHA, V.",
+    "country": {
+     "code": "GRE",
+     "name": "Greece"
+    },
+    "images": {
+     "verticalSmall": "9ybhvmvviw9hqohm"
+    },
+    "active": true
+   },
+   "referee4": null,
+   "venue": {
+    "name": "ADIDAS ARENA",
+    "code": "AVB11",
+    "capacity": 8000,
+    "address": "56 Boulevard Ney, 75018 Paris, France",
+    "images": {
+     "medium": null
+    },
+    "active": true,
+    "notes": ""
+   },
+   "isNeutralVenue": false,
+   "gameStatus": "Confirmed",
+   "winner": null
+  }
+ ],
+ "total": 380
+}
