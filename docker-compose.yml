@@ -1,0 +1,30 @@
+name: euroleague-notifier
+
+services:
+  euroleague-notifier:
+    build: .
+    image: euroleague-notifier:latest
+    container_name: euroleague-notifier
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_PATH: /data/euroleague_notifier.db
+    volumes:
+      - notifier-data:/data
+    tmpfs:
+      - /tmp  # heartbeat file lives in RAM, not on the SD card
+    networks:
+      - pibutler-net
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  notifier-data:
+
+networks:
+  pibutler-net:
+    external: true  # created by PiButler's compose file; start PiButler first

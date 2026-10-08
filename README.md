@@ -23,3 +23,13 @@ uv run --no-project scripts/record_live.py --until 2026-10-09T23:59:00Z
 ```
 
 Snapshots go to `data/recordings/` (gitignored).
+
+## Run with Docker
+
+```sh
+cp .env.example .env   # then fill it in
+docker compose up -d --build
+docker compose logs -f
+```
+
+PiButler must be running first: its compose file creates the shared `pibutler-net` network.

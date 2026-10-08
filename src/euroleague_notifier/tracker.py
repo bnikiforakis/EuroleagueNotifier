@@ -81,6 +81,7 @@ class Notifier:
         events: EventStore,
         clock: Clock = _utcnow,
         sleep: Sleep = asyncio.sleep,
+        on_tick: Callable[[], None] | None = None,
     ):
         self.settings = settings
         self.el = euroleague
@@ -88,6 +89,7 @@ class Notifier:
         self.events = events
         self.now = clock
         self.sleep = sleep
+        self.on_tick = on_tick
         self._tasks: dict[str, asyncio.Task] = {}
         self._games: dict[str, tuple[str, Game]] = {}  # identifier -> (competition, game)
         self._schedule_at: datetime | None = None
@@ -99,6 +101,8 @@ class Notifier:
         while True:
             try:
                 await self.tick()
+                if self.on_tick:
+                    self.on_tick()
             except Exception:
                 log.exception("main loop error")
             await self.sleep(LOOP_INTERVAL.total_seconds())

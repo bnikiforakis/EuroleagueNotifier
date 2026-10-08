@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+import os
 import signal
+from pathlib import Path
 
 from euroleague_notifier.api import EuroleagueClient
 from euroleague_notifier.butler import ButlerClient
@@ -22,7 +24,9 @@ async def run() -> None:
         EuroleagueClient() as euroleague,
         ButlerClient(settings.pibutler_url, settings.pibutler_api_key, settings.project_id) as butler,
     ):
-        notifier = Notifier(settings, euroleague, butler, events)
+        # Docker's healthcheck looks at this file's age (see Dockerfile).
+        heartbeat = Path(os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat"))
+        notifier = Notifier(settings, euroleague, butler, events, on_tick=heartbeat.touch)
         main = asyncio.create_task(notifier.run())
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):

@@ -1,0 +1,12 @@
+.git
+.venv
+.env*
+!.env.example
+data/
+tests/
+**/__pycache__
+.idea
+.vscode
+*.md
+!README.md
+scripts/
