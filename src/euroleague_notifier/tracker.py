@@ -49,9 +49,13 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def build_manifest(clubs: list[Club]) -> dict:
+COMMANDS = [{"command": "score", "description": "Live scores of today's games"}]
+
+
+def build_manifest(clubs: list[Club], callback_url: str | None = None) -> dict:
+    """Project manifest; with a ``callback_url`` PiButler also routes the ``COMMANDS`` to it."""
     unique = sorted({c.code: c for c in clubs}.values(), key=lambda c: c.short_name)
-    return {
+    manifest = {
         "name": "EuroLeague",
         "settings": [
             {
@@ -68,6 +72,9 @@ def build_manifest(clubs: list[Club]) -> dict:
             },
         ],
     }
+    if callback_url:
+        manifest |= {"commands": COMMANDS, "callback_url": callback_url}
+    return manifest
 
 
 def topic(game: Game) -> dict:
@@ -132,6 +139,10 @@ class Notifier:
                 log.exception("main loop error")
             await self.sleep(LOOP_INTERVAL.total_seconds())
 
+    def games(self) -> list[tuple[str, Game]]:
+        """The loaded schedule as ``(competition, game)`` pairs (read-only snapshot)."""
+        return list(self._games.values())
+
     def _beat(self) -> None:
         if self.on_tick:
             self.on_tick()
@@ -147,7 +158,7 @@ class Notifier:
                     for comp in self.settings.competitions
                     for c in await self.el.clubs(comp, self.settings.season(comp))
                 ]
-                await self.butler.register(build_manifest(clubs))
+                await self.butler.register(build_manifest(clubs, self.settings.callback_url))
                 log.info("registered manifest with %d teams", len({c.code for c in clubs}))
                 return
             except (ApiError, ButlerError) as exc:
@@ -210,6 +221,10 @@ class Notifier:
     async def _started(self, gid: str) -> bool:
         """True once anything live has been sent; a schedule change then no longer matters."""
         return await self.events.has(f"{gid}:start") or await self.events.last_period(gid) > 0
+
+    async def final_sent(self, gid: str) -> bool:
+        """True once either final message for the game has been sent."""
+        return await self.events.has(f"{gid}:final") or await self.events.has(f"{gid}:result")
 
     async def _finished(self, gid: str) -> bool:
         return await self.events.has(f"{gid}:final") and await self.events.has(f"{gid}:result")

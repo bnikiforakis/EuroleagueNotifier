@@ -54,7 +54,8 @@ def _names(game: Game) -> tuple[str, str]:
     return escape(game.home.short_name), escape(game.away.short_name)
 
 
-def _ot_suffix(periods: int) -> str:
+def ot_suffix(periods: int) -> str:
+    """``" (OT)"``, ``" (2OT)"``, ... for a game of ``periods`` periods; empty in regulation."""
     extra = periods - REGULATION_PERIODS
     if extra <= 0:
         return ""
@@ -119,9 +120,30 @@ def _top_performers(players: list[PlayerLine], limit: int = 3) -> list[str]:
     return [f"• {_player(p)}: {p.points} PTS, {p.rebounds} REB, {p.assists} AST, PIR {p.pir}" for p in ranked]
 
 
-def _score_line(game: Game, home_score: int, away_score: int, bold_winner: bool = False) -> str:
+def code_score(game: Game, home_score: int, away_score: int) -> str:
+    """Compact plain-text score with club codes, e.g. ``PAN 45-41 FEN`` (en dash)."""
+    return f"{game.home.code} {home_score}{DASH}{away_score} {game.away.code}"
+
+
+def box_sections(game: Game, box: BoxScore, scores: list[tuple[int, int]], stats: list[StatRow]) -> list[str]:
+    """Period table, top scorers and team stats, as message lines."""
+    return [
+        _period_table(game, scores),
+        "🔥 <b>Top scorers</b>",
+        *_top_scorers(box),
+        "",
+        "📊 <b>Team stats</b>",
+        _team_table(game, box, stats),
+    ]
+
+
+def score_line(
+    game: Game, home_score: int, away_score: int, bold_winner: bool = False, bold_both: bool = False
+) -> str:
     home, away = _names(game)
-    if bold_winner and home_score != away_score:
+    if bold_both:
+        home, away = f"<b>{home}</b>", f"<b>{away}</b>"
+    elif bold_winner and home_score != away_score:
         if home_score > away_score:
             home = f"<b>{home}</b>"
         else:
@@ -143,24 +165,19 @@ def quarter_report(game: Game, box: BoxScore, period: int, score: tuple[int, int
     elif len(scores) == period:
         home_score, away_score = sum(h for h, _ in scores), sum(a for _, a in scores)
     lines = [
-        f"🏀 <b>End of {period_label(period)}</b> · {_score_line(game, home_score, away_score)}",
+        f"🏀 <b>End of {period_label(period)}</b> · {score_line(game, home_score, away_score)}",
         "",
-        _period_table(game, scores),
-        "🔥 <b>Top scorers</b>",
-        *_top_scorers(box),
-        "",
-        "📊 <b>Team stats</b>",
-        _team_table(game, box, QUARTER_STATS),
+        *box_sections(game, box, scores, QUARTER_STATS),
     ]
     return "\n".join(lines)
 
 
 def final_report(game: Game, box: BoxScore) -> str:
     """Full-game summary: result, period scores, team stats and top performers by PIR."""
-    score = _score_line(game, box.home.points, box.away.points, bold_winner=True)
+    score = score_line(game, box.home.points, box.away.points, bold_winner=True)
     home, away = _names(game)
     lines = [
-        f"🏁 <b>FINAL</b>{_ot_suffix(len(box.quarter_scores))} · {score}",
+        f"🏁 <b>FINAL</b>{ot_suffix(len(box.quarter_scores))} · {score}",
         "",
         _period_table(game, box.quarter_scores),
         "📊 <b>Team stats</b>",
@@ -174,10 +191,15 @@ def final_report(game: Game, box: BoxScore) -> str:
     return "\n".join(lines)
 
 
-def reminder(game: Game, minutes: int) -> str:
+def matchup(game: Game) -> str:
+    """``<b>Home</b> vs <b>Away</b>`` (escaped)."""
     home, away = _names(game)
+    return f"<b>{home}</b> vs <b>{away}</b>"
+
+
+def reminder(game: Game, minutes: int) -> str:
     parts = [
-        f"⏰ Tip-off in {minutes} min: <b>{home}</b> vs <b>{away}</b>",
+        f"⏰ Tip-off in {minutes} min: {matchup(game)}",
         f"{{{{hm:{iso_z(game.tipoff)}}}}}",
     ]
     if game.venue:
@@ -197,8 +219,8 @@ def tipoff(game: Game) -> str:
 
 def final_score(game: Game, box: BoxScore) -> str:
     """One-line result for people who didn't follow the game."""
-    score = _score_line(game, box.home.points, box.away.points, bold_winner=True)
-    return f"🏁 <b>Final</b>{_ot_suffix(len(box.quarter_scores))} · {score}"
+    score = score_line(game, box.home.points, box.away.points, bold_winner=True)
+    return f"🏁 <b>Final</b>{ot_suffix(len(box.quarter_scores))} · {score}"
 
 
 def daily_schedule(games: list[Game]) -> str:

@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass
 from datetime import time
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 
@@ -19,6 +20,12 @@ class Settings:
     digest_timezone: str = "Europe/Athens"
     db_path: str = "/data/euroleague_notifier.db"
     log_level: str = "INFO"
+    callback_url: str = "http://euroleague-notifier:8081/pibutler"  # empty: no commands (/score)
+
+    @property
+    def callback_port(self) -> int:
+        """The port PiButler calls is the one we listen on, so it comes from the URL itself."""
+        return urlsplit(self.callback_url).port or 80
 
     def season(self, competition: str) -> str:
         return f"{competition}{self.season_year}"
@@ -41,6 +48,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         digest_timezone=env.get("DIGEST_TIMEZONE", "Europe/Athens"),
         db_path=env.get("DB_PATH", "/data/euroleague_notifier.db"),
         log_level=env.get("LOG_LEVEL", "INFO"),
+        callback_url=env.get("CALLBACK_URL", "http://euroleague-notifier:8081/pibutler"),
     )
     ZoneInfo(settings.digest_timezone)  # fail fast on a typo
     return settings

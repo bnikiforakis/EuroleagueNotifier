@@ -13,6 +13,8 @@ services:
       - notifier-data:/data
     tmpfs:
       - /tmp  # heartbeat file lives in RAM, not on the SD card
+    expose:
+      - "8081"  # /score callback for PiButler on pibutler-net; deliberately not published to the host
     networks:
       - pibutler-net
     mem_limit: 128m
