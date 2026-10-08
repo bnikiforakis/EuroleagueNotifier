@@ -63,6 +63,11 @@ def ot_suffix(periods: int) -> str:
     return " (OT)" if extra == 1 else f" ({extra}OT)"
 
 
+def _box(label: str, rows: list[str]) -> str:
+    """A monospace table. Telegram shows ``label`` in the block's header (instead of "Copy code")."""
+    return f'<pre><code class="language-{label}">' + "\n".join(rows) + "</code></pre>"
+
+
 def _period_table(game: Game, scores: list[tuple[int, int]]) -> str:
     head = "".join(f"{period_label(i):>4}" for i in range(1, len(scores) + 1))
     home = "".join(f"{h:>4}" for h, _ in scores)
@@ -73,7 +78,7 @@ def _period_table(game: Game, scores: list[tuple[int, int]]) -> str:
         f"{escape(game.home.code):<3}{home}{total_h:>5}",
         f"{escape(game.away.code):<3}{away}{total_a:>5}",
     ]
-    return "<pre>" + "\n".join(rows) + "</pre>"
+    return _box("Score by quarter", rows)
 
 
 def shooting(made: int, attempted: int) -> str:
@@ -105,7 +110,7 @@ def _team_table(game: Game, box: BoxScore, stats: list[StatRow]) -> str:
     # 3 + 14 + 14 = 31 characters: fits a phone screen with "35/70 (50.0%)" per team.
     rows = [f"{'':<3}{escape(game.home.code):>14}{escape(game.away.code):>14}"]
     rows += [f"{label:<3}{fmt(box.home):>14}{fmt(box.away):>14}" for label, fmt in stats]
-    return "<pre>" + "\n".join(rows) + "</pre>"
+    return _box("Team stats", rows)
 
 
 def periods_line(scores: list[tuple[int, int]], name: Callable[[int], str] = period_label) -> str:
@@ -141,8 +146,7 @@ def box_sections(game: Game, box: BoxScore, scores: list[tuple[int, int]], stats
         "🔥 <b>Top scorers</b>",
         *_top_scorers(box),
         "",
-        "📊 <b>Team stats</b>",
-        _team_table(game, box, stats),
+        _team_table(game, box, stats),  # labelled "Team stats" by its box
     ]
 
 
@@ -213,7 +217,6 @@ def final_report(game: Game, box: BoxScore) -> str:
         f"🏁 <b>FINAL</b>{ot_suffix(len(box.quarter_scores))} · {score}",
         "",
         _period_table(game, box.quarter_scores),
-        "📊 <b>Team stats</b>",
         _team_table(game, box, FINAL_STATS),
         f"⭐ <b>{home}</b>",
         *_top_performers(box.home_players),

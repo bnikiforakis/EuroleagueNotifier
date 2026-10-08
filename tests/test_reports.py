@@ -42,7 +42,8 @@ def double_ot_game() -> Game:
 
 
 def pre_widths(html: str) -> list[int]:
-    return [len(line) for block in re.findall(r"<pre>(.*?)</pre>", html, re.S) for line in block.splitlines()]
+    blocks = re.findall(r"<pre><code[^>]*>(.*?)</code></pre>", html, re.S)
+    return [len(line) for block in blocks for line in block.splitlines()]
 
 
 def test_quarter_report_uses_end_of_period_score():
@@ -52,7 +53,7 @@ def test_quarter_report_uses_end_of_period_score():
     assert text.startswith(f"🏀 <b>End of Q2</b> · Paris 43{DASH}46 LDLC ASVEL")
     assert "Top scorers" in text
     assert "N. Hifi (PRS) <b>30</b>" in text
-    table = text.split("Team stats")[1].split("<pre>")[1].split("</pre>")[0].splitlines()
+    table = text.split('<code class="language-Team stats">')[1].split("</code></pre>")[0].splitlines()
     assert [row.split()[0] for row in table[1:]] == ["FG", "2P", "3P", "FT", "REB", "AST", "TO"]
     assert "Q3" not in text
     assert max(pre_widths(text)) <= 32
@@ -177,3 +178,13 @@ def test_compact_cards_hold_score_and_periods_but_no_tables():
     final = final_card(game, box)
     assert final.startswith("🏁 <b>Final</b> · Paris 96") and "Q4 19" in final
     assert "<pre>" not in card + final
+
+
+def test_tables_are_labelled_boxes():
+    game = games()[31]
+    box = parse_boxscore(load("live_Boxscore_E2026_31.json"))
+    for text in (quarter_report(game, box, 2), final_report(game, box)):
+        assert '<pre><code class="language-Score by quarter">' in text
+        assert '<pre><code class="language-Team stats">' in text
+        assert "<b>Team stats</b>" not in text  # the box label replaces the old heading
+        assert text.count("<pre>") == text.count("</code></pre>") == 2

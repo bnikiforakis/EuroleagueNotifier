@@ -290,7 +290,7 @@ async def test_live_stats_view(make):
     s = await make(FakeEuroleague(boxes={36: replace(BOX, live=True)}))
     reply = await s.action("s|36")
     assert reply["text"].startswith(f"📊 <b>Live stats</b> · Q3 05:12 · PAN 45{DASH}41 ULK\n\n<pre>")
-    assert "🔥 <b>Top scorers</b>" in reply["text"] and "📊 <b>Team stats</b>" in reply["text"]
+    assert "🔥 <b>Top scorers</b>" in reply["text"] and 'class="language-Team stats"' in reply["text"]
     assert "Q4" not in reply["text"]  # periods sliced to the ones under way
     assert actions(reply) == [["s|36", "g|36"]]
     assert labels(reply) == ["🔄 Refresh", "⬅️ Game"]
