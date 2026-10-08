@@ -1,6 +1,4 @@
-# Internal planning / assistant files — never commit
-CLAUDE.md
-.claude/
+# Internal planning files — never commit
 tasks/
 docs/ARCHITECTURE.md
 
