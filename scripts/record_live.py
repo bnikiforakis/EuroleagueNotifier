@@ -64,7 +64,9 @@ async def record_game(comp: str, season: str, game: dict) -> None:
     wait = (tipoff - PRE_GAME - now()).total_seconds()
     if wait > 0:
         log.info("%s: waiting %.0f min for tip-off %s", label, wait / 60, tipoff.isoformat())
-        await asyncio.sleep(wait)
+    # Short naps against the wall clock: timers don't advance while a laptop sleeps.
+    while (wait := (tipoff - PRE_GAME - now()).total_seconds()) > 0:  # noqa: ASYNC110
+        await asyncio.sleep(min(wait, 60))
     log.info("%s: recording", label)
 
     while final_at is None or now() < final_at + POST_FINAL:
