@@ -1,5 +1,6 @@
 """Tracker decisions with a fake clock, scripted live states and a recording PiButler."""
 
+import asyncio
 import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -109,7 +110,8 @@ async def test_full_regulation_game(events):
     notifier, butler, clock = make(events, states)
     await notifier.track("E", GAME)
     gid = GAME.identifier
-    assert butler.keys == [f"{gid}:{k}" for k in ("reminder", "start", "p1", "p2", "p3", "final", "result")]
+    reminder = f"reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}"
+    assert butler.keys == [f"{gid}:{k}" for k in (reminder, "start", "p1", "p2", "p3", "final", "result")]
     assert clock() < TIPOFF + timedelta(minutes=30)  # stopped polling once final
 
 
@@ -119,7 +121,7 @@ async def test_who_gets_what(events):
     await notifier.track("E", GAME)
     gid, followers, others = GAME.identifier, {"topic": GAME.identifier, "following": True}, None
     # followers only: reminder, quarter reports, full final
-    for suffix in (":reminder", ":p1", ":final"):
+    for suffix in (":00Z", ":p1", ":final"):  # reminder key ends with its tip-off time
         assert butler.get(suffix)["audience"] == followers, suffix
     # everyone: tip-off with a follow button
     start = butler.get(":start")
@@ -150,7 +152,7 @@ async def test_overtime_reports_q4_and_each_ot(events):
 
 async def test_restart_mid_game_skips_already_sent_and_old_quarters(events):
     gid = GAME.identifier
-    for key in ("reminder", "start", "p1"):
+    for key in (f"reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}", "start", "p1"):
         await events.add(f"{gid}:{key}")
     notifier, butler, _ = make(events, [state(3), state(4, over=True)], start=TIPOFF + timedelta(minutes=70))
     await notifier.track("E", GAME)
@@ -228,3 +230,52 @@ async def test_event_store_last_period(events):
     for key in ("E2026_1:p1", "E2026_1:p3", "E2026_12:p5", "E2026_1:final"):
         await events.add(key)
     assert await events.last_period("E2026_1") == 3
+
+
+class Blocking(FakeClock):
+    """A clock whose sleeps never finish, so tracker tasks stay parked in their first wait."""
+
+    async def sleep(self, seconds: float) -> None:
+        await asyncio.Event().wait()
+
+
+async def test_rescheduled_game_restarts_its_waiting_tracker(events):
+    clock = Blocking(TIPOFF - timedelta(hours=5))
+    el = FakeEuroleague([PRE])
+    settings = Settings(pibutler_url="http://x", pibutler_api_key="k")
+    notifier = Notifier(settings, el, FakeButler(), events, clock=clock, sleep=clock.sleep)
+    await notifier.refresh_schedule()
+    await notifier.tick()
+    first = notifier._tasks[GAME.identifier]
+
+    moved = replace(GAME, tipoff=TIPOFF + timedelta(hours=1))
+    el.games_list = [moved]
+    await notifier.refresh_schedule()
+    await notifier.tick()
+    await asyncio.sleep(0)
+    assert first.cancelled()
+    assert notifier._tracked[GAME.identifier].tipoff == moved.tipoff
+    notifier._tasks[GAME.identifier].cancel()
+
+
+async def test_schedule_change_after_start_does_not_restart(events):
+    clock = Blocking(TIPOFF + timedelta(minutes=5))
+    el = FakeEuroleague([state(0)])
+    notifier = Notifier(
+        Settings(pibutler_url="http://x", pibutler_api_key="k"),
+        el,
+        FakeButler(),
+        events,
+        clock=clock,
+        sleep=clock.sleep,
+    )
+    await notifier.refresh_schedule()
+    await notifier.tick()
+    first = notifier._tasks[GAME.identifier]
+    await events.add(f"{GAME.identifier}:start")
+    el.games_list = [replace(GAME, tipoff=TIPOFF + timedelta(minutes=10))]
+    await notifier.refresh_schedule()
+    await notifier.tick()
+    await asyncio.sleep(0)
+    assert not first.cancelled()
+    first.cancel()

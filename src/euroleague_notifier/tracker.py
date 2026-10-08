@@ -116,6 +116,7 @@ class Notifier:
         self.sleep = sleep
         self.on_tick = on_tick
         self._tasks: dict[str, asyncio.Task] = {}
+        self._tracked: dict[str, Game] = {}  # the version of each game its task was started with
         self._games: dict[str, tuple[str, Game]] = {}  # identifier -> (competition, game)
         self._schedule_at: datetime | None = None
 
@@ -158,6 +159,15 @@ class Notifier:
         await self.maybe_send_schedule()
         for gid, (comp, game) in self._games.items():
             running = gid in self._tasks and not self._tasks[gid].done()
+            if running and self._tracked[gid].tipoff != game.tipoff and not await self._started(gid):
+                log.info(
+                    "%s: tip-off moved %s → %s, restarting",
+                    gid,
+                    _iso(self._tracked[gid].tipoff),
+                    _iso(game.tipoff),
+                )
+                self._tasks[gid].cancel()
+                running = False
             if not running and self._should_track(game, now) and not await self._finished(gid):
                 log.info(
                     "%s: tracking %s vs %s (tip-off %s)",
@@ -167,6 +177,7 @@ class Notifier:
                     _iso(game.tipoff),
                 )
                 self._tasks[gid] = asyncio.create_task(self.track(comp, game), name=gid)
+                self._tracked[gid] = game
 
     async def refresh_schedule(self) -> None:
         games: dict[str, tuple[str, Game]] = {}
@@ -178,6 +189,10 @@ class Notifier:
 
     def _should_track(self, game: Game, now: datetime) -> bool:
         return now - MAX_GAME_LENGTH < game.tipoff < now + LOOKAHEAD
+
+    async def _started(self, gid: str) -> bool:
+        """True once anything live has been sent; a schedule change then no longer matters."""
+        return await self.events.has(f"{gid}:start") or await self.events.last_period(gid) > 0
 
     async def _finished(self, gid: str) -> bool:
         return await self.events.has(f"{gid}:final") and await self.events.has(f"{gid}:result")
@@ -242,7 +257,7 @@ class Notifier:
     async def _reminder(self, game: Game) -> None:
         minutes = self.settings.reminder_minutes
         await self._sleep_until(game.tipoff - timedelta(minutes=minutes))
-        key = f"{game.identifier}:reminder"
+        key = f"{game.identifier}:reminder:{_iso(game.tipoff)}"  # a rescheduled game gets a new one
         if self.now() < game.tipoff and not await self.events.has(key):
             try:
                 await self._send(
