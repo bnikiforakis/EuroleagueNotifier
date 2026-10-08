@@ -129,7 +129,8 @@ async def test_full_regulation_game(events):
     await notifier.track("E", GAME)
     gid = GAME.identifier
     reminder = f"reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}"
-    assert butler.keys == [f"{gid}:{k}" for k in (reminder, "start", "p1", "p2", "p3", "final", "result")]
+    keys = (reminder, "start", "start:others", "p1", "p2", "p3", "final", "result")
+    assert butler.keys == [f"{gid}:{k}" for k in keys]
     assert clock() < TIPOFF + timedelta(minutes=30)  # stopped polling once final
 
 
@@ -137,14 +138,20 @@ async def test_who_gets_what(events):
     states = [PRE, state(0), state(1), state(4, over=True)]
     notifier, butler, _ = make(events, states)
     await notifier.track("E", GAME)
-    gid, followers, others = GAME.identifier, {"topic": GAME.identifier, "following": True}, None
+    gid, followers = GAME.identifier, {"topic": GAME.identifier, "following": True}
     # followers only: reminder, quarter reports, full final
     for suffix in (":00Z", ":p1", ":final"):  # reminder key ends with its tip-off time
         assert butler.get(suffix)["audience"] == followers, suffix
-    # everyone: tip-off with a follow button
-    start = butler.get(":start")
-    assert start.get("audience") is others and start["tags"] == {"kind": ["start"]}
-    assert start["buttons"][0][0]["follow"] == gid
+    # tip-off: followers with sound; everyone else silently (and only if they want game starts)
+    loud = next(n for n in butler.sent if n["key"] == f"{gid}:start")
+    quiet = butler.get(":start:others")
+    assert loud["audience"] == followers and not loud.get("silent")
+    assert quiet["audience"] == {"topic": gid, "following": False} and quiet["silent"]
+    assert quiet["tags"] == {"kind": ["start"]}
+    assert loud["buttons"][0][0]["follow"] == gid == quiet["buttons"][0][0]["follow"]
+    # only games you follow make a sound
+    for n in butler.sent:
+        assert bool(n.get("silent")) == (n.get("audience") != followers), n["key"]
     # non-followers: one-line result with a Stats button revealing the full report
     result = butler.get(":result")
     assert result["audience"] == {"topic": gid, "following": False}
@@ -177,7 +184,7 @@ async def test_overtime_reports_q4_and_each_ot(events):
 
 async def test_restart_mid_game_skips_already_sent_and_old_quarters(events):
     gid = GAME.identifier
-    for key in (f"reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}", "start", "p1"):
+    for key in (f"reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}", "start", "start:others", "p1"):
         await events.add(f"{gid}:{key}")
     notifier, butler, _ = make(events, [state(3), state(4, over=True)], start=TIPOFF + timedelta(minutes=70))
     await notifier.track("E", GAME)
@@ -223,7 +230,7 @@ async def test_daily_schedule_at_noon_with_follow_buttons(events):
     await notifier.maybe_send_schedule()
     assert butler.keys == ["schedule:2026-10-08"]
     digest = butler.sent[0]
-    assert digest["tags"] == {"kind": ["schedule"]}
+    assert digest["tags"] == {"kind": ["schedule"]} and digest["silent"]
     (button,) = digest["buttons"][0]
     assert button["follow"] == GAME.identifier and "{{hm:2026-10-08T16:00:00Z}}" in button["label"]
     assert "{{time:" not in digest["text"] + button["label"]  # today's schedule: times only

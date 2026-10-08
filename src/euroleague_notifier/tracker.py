@@ -1,10 +1,10 @@
 """Schedule sync, per-game tracking and notification decisions (ADR-008, ADR-014).
 
 Who gets what:
-- everyone: the daily schedule (one Follow button per game), a tip-off message (with Follow),
-  and for games they don't follow, the final score with a 📊 Stats button;
-- followers of a game (pressed Follow, or auto-follow by favourite team): a reminder before
-  tip-off, a report after every quarter and the full final report.
+- everyone: the daily schedule (one Follow button per game), and for games they don't follow a
+  tip-off message (with Follow) and the final score with a 📊 Stats button, all three silent;
+- followers of a game (pressed Follow, or auto-follow by favourite team), with sound: a reminder
+  before tip-off, the tip-off, a score card after every quarter and the final card.
 
 Idle cost is near zero: the schedule is refreshed every couple of hours, and each game gets a
 task that sleeps until its reminder / tip-off, polls every ~45 s while live, then exits.
@@ -267,6 +267,7 @@ class Notifier:
             reports.daily_schedule(upcoming),
             tags={"kind": ["schedule"]},
             topics=[topic(g) for g in upcoming],
+            silent=True,
             buttons=buttons,
         )
 
@@ -317,19 +318,20 @@ class Notifier:
         state = await self.el.period_state(season, game.code)
         if state.game_over:
             return await self._finals(competition, game, state)
-        if (
-            state.current_period >= 1
-            and state.ended_periods == 0
-            and not await self.events.has(f"{gid}:start")
-        ):
-            await self._send(
-                f"{gid}:start",
-                reports.tipoff(game),
-                tags={"kind": ["start"]},
-                expires_at=reports.iso_z(self.now() + QUARTER_TTL),
-                topics=[topic(game)],
-                buttons=[[follow_button(game)]],
-            )
+        if state.current_period >= 1 and state.ended_periods == 0:
+            # Followers hear it; everyone else gets it silently (no sound or vibration).
+            for key, following in ((f"{gid}:start", True), (f"{gid}:start:others", False)):
+                if not await self.events.has(key):
+                    await self._send(
+                        key,
+                        reports.tipoff(game),
+                        tags=None if following else {"kind": ["start"]},
+                        expires_at=reports.iso_z(self.now() + QUARTER_TTL),
+                        topics=[topic(game)],
+                        audience=followers(game, following),
+                        buttons=[[follow_button(game)]],
+                        silent=not following,
+                    )
         period = state.ended_periods
         # Only the latest ended period: after a restart we don't replay old quarters.
         if period > await self.events.last_period(gid) and _another_period_follows(state):
@@ -380,6 +382,7 @@ class Notifier:
                 topics=[topic(game)],
                 audience=followers(game, following=False),
                 buttons=buttons,
+                silent=True,  # games you don't follow never buzz
             )
         return True
 

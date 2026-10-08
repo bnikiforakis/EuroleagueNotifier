@@ -75,9 +75,12 @@ class ButlerClient:
         topics: list[dict] | None = None,
         audience: dict | None = None,
         buttons: list[list[dict]] | None = None,
+        silent: bool = False,
     ) -> dict:
         body = {"idempotency_key": key, "text": text, "tags": tags or {}, "expires_at": expires_at}
         body |= {k: v for k, v in (("topics", topics), ("audience", audience), ("buttons", buttons)) if v}
+        if silent:
+            body["silent"] = True  # no sound or vibration
         result = await self._request("POST", "/notifications", body)
         dup = " (duplicate)" if result.get("duplicate") else ""
         log.info("notified %s → %s recipients%s", key, result.get("recipients"), dup)
