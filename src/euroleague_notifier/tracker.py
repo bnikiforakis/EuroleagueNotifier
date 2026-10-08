@@ -38,6 +38,7 @@ MAX_GAME_LENGTH = timedelta(hours=4)  # stop polling a game this long after tip-
 LIVE_LEAD = timedelta(minutes=2)  # start polling shortly before tip-off
 QUARTER_TTL = timedelta(minutes=30)  # undelivered quarter reports go stale (AC11)
 REMINDER_RETRY = timedelta(minutes=1)
+MAX_NAP = timedelta(minutes=1)  # longest single sleep while waiting for a time
 CATCH_UP_LIMIT = timedelta(minutes=3)  # stop waiting for the box score to match the play-by-play
 
 Clock = Callable[[], datetime]
@@ -380,8 +381,10 @@ class Notifier:
         await self.events.add(key)
 
     async def _sleep_until(self, when: datetime) -> None:
+        # Short naps against the wall clock: asyncio timers don't advance while the host sleeps
+        # (e.g. a laptop lid), so one long sleep could wake up far too late.
         while (delay := (when - self.now()).total_seconds()) > 0:
-            await self.sleep(min(delay, 3600))
+            await self.sleep(min(delay, MAX_NAP.total_seconds()))
 
 
 def _another_period_follows(state: PeriodState) -> bool:

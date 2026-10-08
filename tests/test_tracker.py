@@ -421,3 +421,44 @@ async def test_register_beats_while_retrying(events):
     )
     await notifier.register()
     assert len(beats) == 3  # at startup and on each retry
+
+
+class FrozenTimers(FakeClock):
+    """Simulates host sleep: the wall clock jumps ahead while an asyncio timer is pending."""
+
+    def __init__(self, start: datetime, jump_at: datetime, jump: timedelta):
+        super().__init__(start)
+        self.jump_at, self.jump = jump_at, jump
+        self.naps: list[float] = []
+
+    async def sleep(self, seconds: float) -> None:
+        self.naps.append(seconds)
+        before = self.t
+        self.t += timedelta(seconds=seconds)
+        if before < self.jump_at <= self.t:
+            self.t += self.jump
+
+
+async def test_waiting_tracker_notices_host_sleep_within_a_minute(events):
+    # The laptop sleeps from 3.5 h before tip-off until 7 min after it. With hour-long naps the
+    # tracker would only wake ~30 min later; with short naps it polls within a minute of waking.
+    woke = TIPOFF + timedelta(minutes=7)
+    clock = FrozenTimers(
+        TIPOFF - timedelta(hours=5),
+        jump_at=TIPOFF - timedelta(hours=3, minutes=30),
+        jump=timedelta(hours=3, minutes=37),
+    )
+    polled_at: list[datetime] = []
+
+    class Recording(FakeEuroleague):
+        async def period_state(self, season, code):
+            polled_at.append(clock())
+            return await super().period_state(season, code)
+
+    butler = FakeButler()
+    settings = Settings(pibutler_url="http://x", pibutler_api_key="k")
+    el = Recording([state(0), state(4, over=True)])
+    notifier = Notifier(settings, el, butler, events, clock=clock, sleep=clock.sleep)
+    await notifier.track("E", GAME)
+    assert woke <= polled_at[0] <= woke + timedelta(minutes=1)
+    assert butler.keys[0] == f"{GAME.identifier}:start"  # reminder skipped (too late), live polling ran
