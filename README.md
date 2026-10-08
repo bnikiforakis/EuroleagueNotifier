@@ -33,3 +33,7 @@ docker compose logs -f
 ```
 
 PiButler must be running first: its compose file creates the shared `pibutler-net` network.
+
+## License
+
+[MIT](LICENSE)

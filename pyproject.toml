@@ -3,6 +3,8 @@ name = "euroleague-notifier"
 version = "0.1.0"
 description = "EuroLeague game schedules, quarter and full-game reports, delivered through PiButler"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Bill Nikiforakis", email = "bnikiforakis@gmail.com" }
 ]
