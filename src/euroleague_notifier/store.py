@@ -49,8 +49,9 @@ class EventStore:
 
     async def last_period(self, game_id: str) -> int:
         """Highest period whose report was sent for this game (0 if none)."""
+        prefix = f"{game_id}:p"
         async with self.conn.execute(
-            "SELECT key FROM sent_events WHERE key LIKE ?", (f"{game_id}:p%",)
+            "SELECT key FROM sent_events WHERE substr(key, 1, ?) = ?", (len(prefix), prefix)
         ) as cur:
-            periods = [int(row[0].rsplit(":p", 1)[1]) async for row in cur]
-        return max(periods, default=0)
+            suffixes = [row[0][len(prefix) :] async for row in cur]
+        return max((int(s) for s in suffixes if s.isascii() and s.isdigit()), default=0)

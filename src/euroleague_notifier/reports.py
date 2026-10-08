@@ -7,9 +7,8 @@ each user's timezone. Tables use ``<pre>`` and stay within ~32 characters for ph
 import re
 import unicodedata
 from collections.abc import Callable
-from datetime import UTC
+from datetime import UTC, datetime
 from html import escape
-from itertools import groupby
 
 from euroleague_notifier.models import (
     REGULATION_PERIODS,
@@ -25,8 +24,9 @@ COMPETITION_PATHS = {"E": "euroleague"}
 DASH = "\N{EN DASH}"
 
 
-def iso_z(game: Game) -> str:
-    return game.tipoff.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+def iso_z(dt: datetime) -> str:
+    """UTC ISO timestamp with a ``Z`` suffix, as PiButler placeholders and expiry fields expect."""
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _slug(name: str) -> str:
@@ -129,15 +129,18 @@ def _score_line(game: Game, home_score: int, away_score: int, bold_winner: bool 
     return f"{home} {home_score}{DASH}{away_score} {away}"
 
 
-def quarter_report(game: Game, box: BoxScore, period: int) -> str:
+def quarter_report(game: Game, box: BoxScore, period: int, score: tuple[int, int] | None = None) -> str:
     """Report sent when ``period`` (1-based; 5+ are overtimes) has ended.
 
-    The headline score is the sum of the first ``period`` period scores, so a box score fetched a
-    little after the buzzer still reports the end-of-period score; team stats are game-to-date.
+    The headline is ``score`` (the play-by-play score at the end of the period) when given, else the
+    sum of the first ``period`` period scores, so a box score fetched a little after the buzzer still
+    reports the end-of-period score; team stats are game-to-date.
     """
     scores = box.quarter_scores[:period]
     home_score, away_score = box.home.points, box.away.points
-    if len(scores) == period:
+    if score is not None:
+        home_score, away_score = score
+    elif len(scores) == period:
         home_score, away_score = sum(h for h, _ in scores), sum(a for _, a in scores)
     lines = [
         f"🏀 <b>End of {period_label(period)}</b> · {_score_line(game, home_score, away_score)}",
@@ -152,7 +155,7 @@ def quarter_report(game: Game, box: BoxScore, period: int) -> str:
     return "\n".join(lines)
 
 
-def final_report(game: Game, box: BoxScore, url: str | None = None) -> str:
+def final_report(game: Game, box: BoxScore) -> str:
     """Full-game summary: result, period scores, team stats and top performers by PIR."""
     score = _score_line(game, box.home.points, box.away.points, bold_winner=True)
     home, away = _names(game)
@@ -168,42 +171,18 @@ def final_report(game: Game, box: BoxScore, url: str | None = None) -> str:
         f"⭐ <b>{away}</b>",
         *_top_performers(box.away_players),
     ]
-    if url:
-        lines += ["", f'<a href="{escape(url)}">Game center</a>']
     return "\n".join(lines)
 
 
 def reminder(game: Game, minutes: int) -> str:
     home, away = _names(game)
-    parts = [f"⏰ Tip-off in {minutes} min: <b>{home}</b> vs <b>{away}</b>", f"{{{{hm:{iso_z(game)}}}}}"]
+    parts = [
+        f"⏰ Tip-off in {minutes} min: <b>{home}</b> vs <b>{away}</b>",
+        f"{{{{hm:{iso_z(game.tipoff)}}}}}",
+    ]
     if game.venue:
         parts.append(escape(game.venue.title()))
     return " · ".join(parts)
-
-
-def _digest_line(game: Game, time_format: str) -> str:
-    home, away = _names(game)
-    if game.played and game.home_score is not None and game.away_score is not None:
-        return f"✅ {_score_line(game, game.home_score, game.away_score, bold_winner=True)}"
-    return f"🕒 {{{{{time_format}:{iso_z(game)}}}}} {home} vs {away}"
-
-
-def schedule_digest(games: list[Game], title: str, time_format: str = "time") -> str:
-    """Games sorted by tip-off and grouped by round.
-
-    ``time_format`` is the PiButler placeholder: "time" (day + time) or "hm" (time only, for a
-    single day's games).
-    """
-    lines = [f"📅 <b>{escape(title, quote=False)}</b>"]
-    if not games:
-        return "\n".join([*lines, "", "No games scheduled."])
-    ordered = sorted(games, key=lambda g: (g.round or 0, g.tipoff, g.code))
-    for round_number, group in groupby(ordered, key=lambda g: g.round):
-        lines.append("")
-        if round_number is not None:
-            lines.append(f"<b>Round {round_number}</b>")
-        lines += [_digest_line(g, time_format) for g in group]
-    return "\n".join(lines)
 
 
 def title(game: Game) -> str:
@@ -235,4 +214,4 @@ def daily_schedule(games: list[Game]) -> str:
 
 def schedule_label(game: Game, following: bool) -> str:
     star = "⭐" if following else "☆"
-    return f"{star} {{{{hm:{iso_z(game)}}}}} {game.home.short_name} {DASH} {game.away.short_name}"
+    return f"{star} {{{{hm:{iso_z(game.tipoff)}}}}} {game.home.short_name} {DASH} {game.away.short_name}"

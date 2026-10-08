@@ -1,6 +1,7 @@
 """Client for the PiButler project API (ADR-012)."""
 
 import asyncio
+import json
 import logging
 from typing import Any, Self
 
@@ -50,7 +51,12 @@ class ButlerClient:
                 if resp.status_code < 500:
                     if resp.is_error:
                         raise ButlerError(f"{method} {path}: {resp.status_code} {resp.text}")
-                    return resp.json()
+                    if not resp.content.strip():
+                        return {}
+                    try:
+                        return resp.json()
+                    except json.JSONDecodeError as exc:
+                        raise ButlerError(f"{method} {path}: invalid JSON in response") from exc
                 error = f"{resp.status_code} {resp.text}"
             if attempt < 2:
                 await asyncio.sleep(self._backoff * 2**attempt)

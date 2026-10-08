@@ -54,11 +54,15 @@ class LiveHeader:
 
 @dataclass(frozen=True)
 class PeriodState:
-    """Period progress derived from play-by-play markers."""
+    """Period progress derived from play-by-play markers.
+
+    ``score`` is the running (home, away) score at the latest ``EP``/``EG`` marker, if any.
+    """
 
     ended_periods: int
     game_over: bool
     current_period: int
+    score: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)

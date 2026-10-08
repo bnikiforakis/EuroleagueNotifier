@@ -21,7 +21,7 @@ from euroleague_notifier import reports
 from euroleague_notifier.api import ApiError, EuroleagueClient
 from euroleague_notifier.butler import ButlerClient, ButlerError
 from euroleague_notifier.config import Settings
-from euroleague_notifier.models import Club, Game
+from euroleague_notifier.models import REGULATION_PERIODS, BoxScore, Club, Game, PeriodState
 from euroleague_notifier.store import EventStore
 
 log = logging.getLogger(__name__)
@@ -37,6 +37,8 @@ LOOKAHEAD = timedelta(hours=26)  # start tracking (sleeping) tasks this far ahea
 MAX_GAME_LENGTH = timedelta(hours=4)  # stop polling a game this long after tip-off
 LIVE_LEAD = timedelta(minutes=2)  # start polling shortly before tip-off
 QUARTER_TTL = timedelta(minutes=30)  # undelivered quarter reports go stale (AC11)
+REMINDER_RETRY = timedelta(minutes=1)
+CATCH_UP_LIMIT = timedelta(minutes=3)  # stop waiting for the box score to match the play-by-play
 
 Clock = Callable[[], datetime]
 Sleep = Callable[[float], Awaitable[None]]
@@ -44,10 +46,6 @@ Sleep = Callable[[float], Awaitable[None]]
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
-
-
-def _iso(dt: datetime) -> str:
-    return dt.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def build_manifest(clubs: list[Club]) -> dict:
@@ -78,7 +76,7 @@ def topic(game: Game) -> dict:
         "title": name,
         "auto_follow": {"teams": [game.home.code, game.away.code]},
         "follow_text": (
-            f"⭐ You're following <b>{escape(name)}</b> ({{{{hm:{reports.iso_z(game)}}}}}).\n"
+            f"⭐ You're following <b>{escape(name)}</b> ({{{{hm:{reports.iso_z(game.tipoff)}}}}}).\n"
             "You'll get a reminder before tip-off, stats after every quarter and the full box score."
         ),
         "unfollow_text": f"Unfollowed {name}",
@@ -119,6 +117,7 @@ class Notifier:
         self._tracked: dict[str, Game] = {}  # the version of each game its task was started with
         self._games: dict[str, tuple[str, Game]] = {}  # identifier -> (competition, game)
         self._schedule_at: datetime | None = None
+        self._lagging: dict[str, datetime] = {}  # message key -> when its box score was first behind
 
     # --- main loop ---------------------------------------------------------------------------
 
@@ -127,16 +126,20 @@ class Notifier:
         while True:
             try:
                 await self.tick()
-                if self.on_tick:
-                    self.on_tick()
+                self._beat()
             except Exception:
                 log.exception("main loop error")
             await self.sleep(LOOP_INTERVAL.total_seconds())
+
+    def _beat(self) -> None:
+        if self.on_tick:
+            self.on_tick()
 
     async def register(self) -> None:
         """Register the manifest, retrying until both the API and PiButler are reachable."""
         delay = 5.0
         while True:
+            self._beat()  # alive while waiting, not only once ticking
             try:
                 clubs = [
                     c
@@ -152,19 +155,32 @@ class Notifier:
                 delay = min(delay * 2, 300)
 
     async def tick(self) -> None:
+        """Refresh the schedule, send the daily digest and (re)start game tasks.
+
+        A failing refresh or digest doesn't stop tracking the games already known; only before any
+        schedule has loaded does the error propagate.
+        """
         now = self.now()
         if self._schedule_at is None or now - self._schedule_at >= SCHEDULE_REFRESH:
-            await self.refresh_schedule()
-            self._schedule_at = now
-        await self.maybe_send_schedule()
+            try:
+                await self.refresh_schedule()
+                self._schedule_at = now
+            except Exception:
+                if self._schedule_at is None:
+                    raise
+                log.exception("schedule refresh failed, keeping the previous one")
+        try:
+            await self.maybe_send_schedule()
+        except Exception:
+            log.exception("daily schedule failed")
         for gid, (comp, game) in self._games.items():
             running = gid in self._tasks and not self._tasks[gid].done()
             if running and self._tracked[gid].tipoff != game.tipoff and not await self._started(gid):
                 log.info(
                     "%s: tip-off moved %s → %s, restarting",
                     gid,
-                    _iso(self._tracked[gid].tipoff),
-                    _iso(game.tipoff),
+                    reports.iso_z(self._tracked[gid].tipoff),
+                    reports.iso_z(game.tipoff),
                 )
                 self._tasks[gid].cancel()
                 running = False
@@ -174,7 +190,7 @@ class Notifier:
                     gid,
                     game.home.code,
                     game.away.code,
-                    _iso(game.tipoff),
+                    reports.iso_z(game.tipoff),
                 )
                 self._tasks[gid] = asyncio.create_task(self.track(comp, game), name=gid)
                 self._tracked[gid] = game
@@ -257,26 +273,28 @@ class Notifier:
     async def _reminder(self, game: Game) -> None:
         minutes = self.settings.reminder_minutes
         await self._sleep_until(game.tipoff - timedelta(minutes=minutes))
-        key = f"{game.identifier}:reminder:{_iso(game.tipoff)}"  # a rescheduled game gets a new one
-        if self.now() < game.tipoff and not await self.events.has(key):
+        key = f"{game.identifier}:reminder:{reports.iso_z(game.tipoff)}"  # a rescheduled game gets a new one
+        while self.now() < game.tipoff and not await self.events.has(key):
             try:
                 await self._send(
                     key,
                     reports.reminder(game, minutes),
-                    expires_at=_iso(game.tipoff),
+                    expires_at=reports.iso_z(game.tipoff),
                     topics=[topic(game)],
                     audience=followers(game),
                     buttons=[[follow_button(game)]],
                 )
             except ButlerError as exc:
-                log.warning("%s: reminder failed: %s", game.identifier, exc)
+                log.warning("%s: reminder failed, retrying: %s", game.identifier, exc)
+                left = (game.tipoff - self.now()).total_seconds()
+                await self.sleep(max(0.0, min(REMINDER_RETRY.total_seconds(), left)))
 
     async def poll(self, competition: str, game: Game) -> bool:
         """One live poll. Returns True once the game is over and both final messages are out."""
         season, gid = game.season, game.identifier
         state = await self.el.period_state(season, game.code)
         if state.game_over:
-            return await self._finals(competition, game)
+            return await self._finals(competition, game, state)
         if (
             state.current_period >= 1
             and state.ended_periods == 0
@@ -286,32 +304,36 @@ class Notifier:
                 f"{gid}:start",
                 reports.tipoff(game),
                 tags={"kind": ["start"]},
-                expires_at=_iso(self.now() + QUARTER_TTL),
+                expires_at=reports.iso_z(self.now() + QUARTER_TTL),
                 topics=[topic(game)],
                 buttons=[[follow_button(game)]],
             )
-        if state.ended_periods > await self.events.last_period(gid):
-            # Only the latest ended period: after a restart we don't replay old quarters.
-            period = state.ended_periods
+        period = state.ended_periods
+        # Only the latest ended period: after a restart we don't replay old quarters.
+        if period > await self.events.last_period(gid) and _another_period_follows(state):
+            key = f"{gid}:p{period}"
             box = await self.el.boxscore(season, game.code)
-            if box is None:
+            if box is None or not self._caught_up(key, _box_reached(box, state.score)):
                 return False
             await self._send(
-                f"{gid}:p{period}",
-                reports.quarter_report(game, box, period),
-                expires_at=_iso(self.now() + QUARTER_TTL),
+                key,
+                reports.quarter_report(game, box, period, state.score),
+                expires_at=reports.iso_z(self.now() + QUARTER_TTL),
                 topics=[topic(game)],
                 audience=followers(game),
                 buttons=[[follow_button(game)]],
             )
         return False
 
-    async def _finals(self, competition: str, game: Game) -> bool:
+    async def _finals(self, competition: str, game: Game, state: PeriodState) -> bool:
         gid = game.identifier
         if await self._finished(gid):
             return True
         box = await self.el.boxscore(game.season, game.code)
         if box is None:
+            return False
+        final = not box.live and (state.score is None or (box.home.points, box.away.points) == state.score)
+        if not self._caught_up(f"{gid}:final", final):
             return False
         full = reports.final_report(game, box)
         url = reports.game_url(game, competition)
@@ -335,6 +357,22 @@ class Notifier:
             )
         return True
 
+    def _caught_up(self, key: str, caught_up: bool) -> bool:
+        """Whether to send ``key`` now: once its box score has caught up, or after ``CATCH_UP_LIMIT``.
+
+        The Boxscore and PlayByPlay are cached independently, so the box score can lag by a poll or
+        two; the limit keeps a broken feed from blocking the message forever.
+        """
+        if caught_up:
+            self._lagging.pop(key, None)
+            return True
+        since = self._lagging.setdefault(key, self.now())
+        if self.now() - since < CATCH_UP_LIMIT:
+            log.info("%s: box score behind the play-by-play, waiting", key)
+            return False
+        log.warning("%s: box score still behind after %s, sending anyway", key, CATCH_UP_LIMIT)
+        return True
+
     async def _send(
         self, key: str, text: str, tags: dict | None = None, expires_at: str | None = None, **extra
     ) -> None:
@@ -344,3 +382,20 @@ class Notifier:
     async def _sleep_until(self, when: datetime) -> None:
         while (delay := (when - self.now()).total_seconds()) > 0:
             await self.sleep(min(delay, 3600))
+
+
+def _another_period_follows(state: PeriodState) -> bool:
+    """False when the ended period may be the last one, so the final report covers it instead.
+
+    From Q4 on, a period is followed by overtime only if it ends tied; otherwise ``EG`` is imminent.
+    An unknown score keeps the report.
+    """
+    if state.ended_periods < REGULATION_PERIODS or state.score is None:
+        return True
+    home, away = state.score
+    return home == away
+
+
+def _box_reached(box: BoxScore, score: tuple[int, int] | None) -> bool:
+    """Box score totals are at least the play-by-play score (stats are game-to-date)."""
+    return score is None or (box.home.points >= score[0] and box.away.points >= score[1])

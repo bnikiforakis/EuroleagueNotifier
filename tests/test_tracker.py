@@ -8,10 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from euroleague_notifier.api import parse_boxscore, parse_clubs, parse_games
+from euroleague_notifier.api import ApiError, parse_boxscore, parse_clubs, parse_games
 from euroleague_notifier.butler import ButlerError
 from euroleague_notifier.config import Settings
 from euroleague_notifier.models import PeriodState
+from euroleague_notifier.reports import DASH
 from euroleague_notifier.store import EventStore
 from euroleague_notifier.tracker import Notifier, build_manifest
 
@@ -39,20 +40,30 @@ class FakeClock:
 
 
 class FakeEuroleague:
-    def __init__(self, states: list[PeriodState], games=None):
+    def __init__(self, states: list[PeriodState], games=None, boxes=None):
         self.states = list(states)
         self.games_list = games or [GAME]
+        self.boxes = list(boxes or [BOX])
+        self.fail_games = False
+        self.fail_clubs = 0
+        self.box_calls = 0
 
     async def period_state(self, season, code):
         return self.states.pop(0) if len(self.states) > 1 else self.states[0]
 
     async def boxscore(self, season, code):
-        return BOX
+        self.box_calls += 1
+        return self.boxes.pop(0) if len(self.boxes) > 1 else self.boxes[0]
 
     async def games(self, competition, season):
+        if self.fail_games:
+            raise ApiError("empty response")
         return self.games_list
 
     async def clubs(self, competition, season):
+        if self.fail_clubs:
+            self.fail_clubs -= 1
+            raise ApiError("down")
         return parse_clubs(load("v2_clubs_E2026.json"))
 
 
@@ -80,8 +91,15 @@ class FakeButler:
         return next(n for n in self.sent if n["key"].endswith(suffix))
 
 
-def state(ended: int, over: bool = False) -> PeriodState:
-    return PeriodState(ended_periods=ended, game_over=over, current_period=ended + (0 if over else 1))
+def state(ended: int, over: bool = False, score: tuple[int, int] | None = None) -> PeriodState:
+    return PeriodState(
+        ended_periods=ended, game_over=over, current_period=ended + (0 if over else 1), score=score
+    )
+
+
+def lagging(home_points: int, live: bool = False):
+    """``BOX`` as a cached Boxscore that hasn't caught up with the play-by-play yet."""
+    return replace(BOX, home=replace(BOX.home, points=home_points), live=live)
 
 
 PRE = PeriodState(ended_periods=0, game_over=False, current_period=0)  # before tip-off
@@ -94,12 +112,12 @@ async def events():
     await store.close()
 
 
-def make(events, states, start=TIPOFF - timedelta(hours=1), games=None):
+def make(events, states, start=TIPOFF - timedelta(hours=1), games=None, boxes=None):
     clock = FakeClock(start)
     butler = FakeButler()
     settings = Settings(pibutler_url="http://x", pibutler_api_key="k", poll_seconds=45)
     notifier = Notifier(
-        settings, FakeEuroleague(states, games), butler, events, clock=clock, sleep=clock.sleep
+        settings, FakeEuroleague(states, games, boxes), butler, events, clock=clock, sleep=clock.sleep
     )
     return notifier, butler, clock
 
@@ -232,6 +250,13 @@ async def test_event_store_last_period(events):
     assert await events.last_period("E2026_1") == 3
 
 
+async def test_event_store_last_period_exact_prefix_and_numeric_only(events):
+    # "_" is a LIKE wildcard; non-numeric suffixes must be ignored, not crash.
+    for key in ("E2026_1:p2", "E2026x1:p9", "E2026_1:pfoo", "E2026_1:p", "E2026_1:p²"):
+        await events.add(key)
+    assert await events.last_period("E2026_1") == 2
+
+
 class Blocking(FakeClock):
     """A clock whose sleeps never finish, so tracker tasks stay parked in their first wait."""
 
@@ -279,3 +304,120 @@ async def test_schedule_change_after_start_does_not_restart(events):
     await asyncio.sleep(0)
     assert not first.cancelled()
     first.cancel()
+
+
+async def test_final_waits_for_lagging_box_score(events):
+    gid = GAME.identifier
+    over = state(4, over=True, score=(96, 98))
+    notifier, butler, clock = make(
+        events, [over], start=TIPOFF + timedelta(hours=2), boxes=[lagging(94), BOX]
+    )
+    start = clock()
+    await notifier.track("E", GAME)
+    assert butler.keys == [f"{gid}:final", f"{gid}:result"]
+    assert f" 96{DASH}98 " in butler.get(":result")["text"]
+    assert clock() - start == timedelta(seconds=45)  # one extra poll
+
+
+async def test_final_waits_while_box_score_is_live(events):
+    over = state(4, over=True, score=(96, 98))
+    notifier, butler, clock = make(
+        events, [over], start=TIPOFF + timedelta(hours=2), boxes=[lagging(96, live=True), BOX]
+    )
+    start = clock()
+    await notifier.track("E", GAME)
+    assert butler.keys == [f"{GAME.identifier}:final", f"{GAME.identifier}:result"]
+    assert clock() - start == timedelta(seconds=45)
+
+
+async def test_final_sent_anyway_when_box_score_never_catches_up(events):
+    over = state(4, over=True, score=(96, 98))
+    notifier, butler, clock = make(events, [over], start=TIPOFF + timedelta(hours=2), boxes=[lagging(94)])
+    start = clock()
+    await notifier.track("E", GAME)
+    assert butler.keys == [f"{GAME.identifier}:final", f"{GAME.identifier}:result"]
+    assert timedelta(minutes=3) <= clock() - start < timedelta(minutes=4)
+
+
+async def test_quarter_report_waits_for_lagging_box_score(events):
+    q1 = state(1, score=(21, 14))
+    notifier, butler, _ = make(events, [q1, q1, state(4, over=True)], start=TIPOFF, boxes=[lagging(19), BOX])
+    await notifier.track("E", GAME)
+    gid = GAME.identifier
+    assert butler.keys == [f"{gid}:p1", f"{gid}:final", f"{gid}:result"]
+    assert f" 21{DASH}14 " in butler.get(":p1")["text"].splitlines()[0]
+    assert notifier.el.box_calls == 3  # lagging, caught up, final
+
+
+async def test_no_period_report_right_before_the_final(events):
+    # From Q4 on, an EP that isn't tied means EG follows; only tied periods lead to overtime.
+    states = [
+        state(3, score=(60, 60)),
+        state(4, score=(80, 80)),  # tied: OT follows
+        state(5, score=(90, 85)),  # not tied: the final is imminent
+        state(5, over=True),
+    ]
+    notifier, butler, _ = make(events, states, start=TIPOFF)
+    await notifier.track("E", GAME)
+    gid = GAME.identifier
+    assert butler.keys == [f"{gid}:p3", f"{gid}:p4", f"{gid}:final", f"{gid}:result"]
+
+
+async def test_reminder_retries_until_pibutler_accepts(events):
+    notifier, butler, clock = make(events, [state(4, over=True)])
+    butler.fail_next = 2
+    await notifier._reminder(GAME)
+    assert butler.keys == [f"{GAME.identifier}:reminder:{TIPOFF:%Y-%m-%dT%H:%M:%SZ}"]
+    assert clock() == TIPOFF - timedelta(minutes=30) + timedelta(minutes=2)
+
+
+async def test_reminder_retries_stop_at_tipoff(events):
+    notifier, butler, clock = make(events, [state(4, over=True)])
+    butler.fail_next = 1000
+    await notifier._reminder(GAME)
+    assert butler.keys == [] and clock() == TIPOFF
+
+
+async def test_tick_keeps_tracking_when_refresh_or_digest_fails(events):
+    clock = Blocking(TIPOFF - timedelta(hours=5))  # 14:00 Athens: the digest is due
+    el, butler = FakeEuroleague([PRE]), FakeButler()
+    notifier = Notifier(
+        Settings(pibutler_url="http://x", pibutler_api_key="k"),
+        el,
+        butler,
+        events,
+        clock=clock,
+        sleep=clock.sleep,
+    )
+    el.fail_games = True
+    with pytest.raises(ApiError):  # no schedule loaded yet: nothing to track
+        await notifier.tick()
+    el.fail_games, butler.fail_next = False, 1
+    await notifier.tick()  # digest fails
+    first = notifier._tasks[GAME.identifier]
+    first.cancel()
+    await asyncio.sleep(0)
+    clock.t += timedelta(hours=3)
+    el.fail_games = True
+    await notifier.tick()  # refresh fails, the known schedule is still tracked
+    second = notifier._tasks[GAME.identifier]
+    assert second is not first and not second.done()
+    second.cancel()
+
+
+async def test_register_beats_while_retrying(events):
+    beats = []
+    clock = FakeClock(TIPOFF)
+    el = FakeEuroleague([PRE])
+    el.fail_clubs = 2
+    notifier = Notifier(
+        Settings(pibutler_url="http://x", pibutler_api_key="k"),
+        el,
+        FakeButler(),
+        events,
+        clock=clock,
+        sleep=clock.sleep,
+        on_tick=lambda: beats.append(clock()),
+    )
+    await notifier.register()
+    assert len(beats) == 3  # at startup and on each retry

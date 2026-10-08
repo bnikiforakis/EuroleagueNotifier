@@ -130,19 +130,35 @@ def parse_period_state(payload: Any) -> PeriodState:
     """Derive period progress from PlayByPlay ``BP``/``EP``/``EG`` markers.
 
     The last period of a game may close with ``EG`` only (no ``EP``), so a game that is over counts
-    every begun period as ended.
+    every begun period as ended. Markers carry no score themselves; plays that score carry the running
+    ``POINTS_A``/``POINTS_B`` (home/away), so the last one before a marker is the score at that marker.
     """
     if not payload:
         return PeriodState(ended_periods=0, game_over=False, current_period=0)
-    types = [_str(play.get("PLAYTYPE")) for section in PBP_SECTIONS for play in payload.get(section) or []]
-    begun, ended, game_over = types.count("BP"), types.count("EP"), "EG" in types
+    begun = ended = 0
+    game_over = False
+    running, score = (0, 0), None
+    for play in (play for section in PBP_SECTIONS for play in payload.get(section) or []):
+        kind = _str(play.get("PLAYTYPE"))
+        if play.get("POINTS_A") is not None and play.get("POINTS_B") is not None:
+            running = (_int(play["POINTS_A"]), _int(play["POINTS_B"]))
+        if kind == "BP":
+            begun += 1
+        elif kind == "EP":
+            ended += 1
+            score = running
+        elif kind == "EG":
+            game_over = True
+            score = running
     if game_over:
         ended = max(ended, begun)
     if begun == 0:  # nothing has started yet, whatever ActualQuarter says before tip-off
-        return PeriodState(ended_periods=ended, game_over=game_over, current_period=0)
+        return PeriodState(ended_periods=ended, game_over=game_over, current_period=0, score=score)
     actual = payload.get("ActualQuarter")
     current = _int(actual) if actual not in (None, "") else begun
-    return PeriodState(ended_periods=ended, game_over=game_over, current_period=max(current, begun))
+    return PeriodState(
+        ended_periods=ended, game_over=game_over, current_period=max(current, begun), score=score
+    )
 
 
 def _player(raw: dict) -> PlayerLine:
@@ -279,15 +295,19 @@ class EuroleagueClient:
     async def _live(self, feed: str, season: str, code: int) -> Any:
         return await self._get(f"{LIVE_BASE}/{feed}", {"gamecode": code, "seasoncode": season})
 
+    async def _v2(self, path: str) -> Any:
+        """Schedule/clubs payload; an empty body is an error here, so callers back off and retry."""
+        url = f"{API_BASE}/v2/{path}"
+        payload = await self._get(url)
+        if payload is None:
+            raise ApiError(f"empty response from {url}")
+        return payload
+
     async def games(self, competition: str, season: str) -> list[Game]:
-        return parse_games(
-            await self._get(f"{API_BASE}/v2/competitions/{competition}/seasons/{season}/games")
-        )
+        return parse_games(await self._v2(f"competitions/{competition}/seasons/{season}/games"))
 
     async def clubs(self, competition: str, season: str) -> list[Club]:
-        return parse_clubs(
-            await self._get(f"{API_BASE}/v2/competitions/{competition}/seasons/{season}/clubs")
-        )
+        return parse_clubs(await self._v2(f"competitions/{competition}/seasons/{season}/clubs"))
 
     async def header(self, season: str, code: int) -> LiveHeader | None:
         return parse_header(await self._live("Header", season, code))

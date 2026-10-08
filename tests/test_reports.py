@@ -1,7 +1,7 @@
 import json
 import re
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from euroleague_notifier.api import parse_boxscore, parse_games
@@ -10,9 +10,9 @@ from euroleague_notifier.reports import (
     DASH,
     final_report,
     game_url,
+    iso_z,
     quarter_report,
     reminder,
-    schedule_digest,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -57,6 +57,18 @@ def test_quarter_report_uses_end_of_period_score():
     assert max(pre_widths(text)) <= 32
 
 
+def test_quarter_report_headline_prefers_play_by_play_score():
+    # A box score fetched a little after the buzzer can already be ahead of the end-of-period score.
+    box = parse_boxscore(load("live_Boxscore_E2026_31.json"))
+    text = quarter_report(games()[31], box, 2, score=(44, 45))
+    assert text.startswith(f"🏀 <b>End of Q2</b> · Paris 44{DASH}45 LDLC ASVEL")
+
+
+def test_iso_z_converts_to_utc():
+    athens = datetime(2026, 10, 8, 19, 0, tzinfo=timezone(timedelta(hours=3)))
+    assert iso_z(athens) == "2026-10-08T16:00:00Z"
+
+
 def test_quarter_report_overtime_label():
     box = parse_boxscore(load("live_Boxscore_E2025_340.json"))
     text = quarter_report(double_ot_game(), box, 6)
@@ -69,19 +81,17 @@ def test_quarter_report_overtime_label():
 def test_final_report_regulation():
     game = games()[31]
     box = parse_boxscore(load("live_Boxscore_E2026_31.json"))
-    url = game_url(game, "E")
-    text = final_report(game, box, url)
+    text = final_report(game, box)
     assert text.startswith(f"🏁 <b>FINAL</b> · Paris 96{DASH}98 <b>LDLC ASVEL</b>")
     assert "(OT)" not in text
     for label in ("FG%", "3P%", "FT%", "REB", "AST", "STL", "TO", "PIR"):
         assert label in text
     assert "T. Waters: 19 PTS, 2 REB, 3 AST, PIR 25" in text
-    assert f'<a href="{url}">' in text
 
 
 def test_final_report_double_overtime():
     box = parse_boxscore(load("live_Boxscore_E2025_340.json"))
-    text = final_report(double_ot_game(), box, None)
+    text = final_report(double_ot_game(), box)
     assert text.startswith(f"🏁 <b>FINAL</b> (2OT) · <b>Partizan</b> 110{DASH}104 Valencia")
     assert "OT2" in text
     assert "<a href" not in text
@@ -91,7 +101,7 @@ def test_names_are_escaped():
     game = games()[31]
     evil = replace(game, home=Club("PRS", "A<b>", "Paris <script>"))
     box = parse_boxscore(load("live_Boxscore_E2026_31.json"))
-    for text in (quarter_report(evil, box, 1), final_report(evil, box, None), reminder(evil, 30)):
+    for text in (quarter_report(evil, box, 1), final_report(evil, box), reminder(evil, 30)):
         assert "<script>" not in text
         assert "Paris &lt;script&gt;" in text
 
@@ -101,27 +111,6 @@ def test_reminder():
     assert text.startswith("⏰ Tip-off in 30 min: <b>Dubai</b> vs <b>Crvena Zvezda</b>")
     assert "{{hm:2026-10-08T16:00:00Z}}" in text
     assert "Coca-Cola Arena" in text
-
-
-def test_schedule_digest():
-    text = schedule_digest(list(games().values()), "Thursday")
-    assert text.startswith("📅 <b>Thursday</b>")
-    assert "<b>Round 4</b>" in text
-    assert "{{time:2026-10-08T16:00:00Z}} Dubai vs Crvena Zvezda" in text
-    assert f"Paris 96{DASH}98 <b>LDLC ASVEL</b>" in text
-    times = re.findall(r"\{\{time:([^}]+)\}\}", text)
-    assert times == sorted(times)
-    assert all(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", t) for t in times)
-
-
-def test_schedule_digest_single_day_uses_time_only():
-    text = schedule_digest(list(games().values()), "Today's games", time_format="hm")
-    assert "{{hm:" in text and "{{time:" not in text
-    assert "Today's games" in text  # apostrophe not entity-escaped
-
-
-def test_schedule_digest_empty():
-    assert "No games" in schedule_digest([], "Today")
 
 
 def test_game_url():

@@ -80,6 +80,7 @@ def test_period_state_regulation_final():
     assert state.ended_periods == 4
     assert state.game_over
     assert state.current_period == 4
+    assert state.score == (96, 98)  # running score at EG, from the plays before it
 
 
 def test_period_state_double_overtime():
@@ -87,6 +88,15 @@ def test_period_state_double_overtime():
     assert state.ended_periods == 6
     assert state.game_over
     assert state.current_period == 6
+    assert state.score == (110, 104)
+
+
+def test_period_state_score_at_last_end_of_period():
+    pbp = copy.deepcopy(load("live_PlayByPlay_E2025_340.json"))
+    pbp["ExtraTime"] = []
+    state = parse_period_state(pbp)
+    assert (state.ended_periods, state.game_over, state.score) == (4, False, (84, 84))
+    assert parse_period_state(None).score is None
 
 
 def test_period_state_mid_game():
@@ -195,6 +205,14 @@ async def test_client_does_not_retry_4xx():
         with pytest.raises(ApiError):
             await client.clubs("E", "E2026")
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("feed", ["games", "clubs"])
+async def test_client_empty_schedule_is_an_error(feed):
+    transport, _ = _transport([httpx.Response(200, content=b"")])
+    async with EuroleagueClient(transport=transport, backoff=0) as client:
+        with pytest.raises(ApiError, match="empty response"):
+            await getattr(client, feed)("E", "E2026")
 
 
 def test_period_state_before_first_begin_period_is_not_started():
