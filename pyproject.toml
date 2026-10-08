@@ -1,0 +1,35 @@
+[project]
+name = "euroleague-notifier"
+version = "0.1.0"
+description = "EuroLeague game schedules, quarter and full-game reports, delivered through PiButler"
+readme = "README.md"
+authors = [
+    { name = "Bill Nikiforakis", email = "bnikiforakis@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+euroleague-notifier = "euroleague_notifier:main"
+
+[build-system]
+requires = ["uv_build>=0.12.11,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
