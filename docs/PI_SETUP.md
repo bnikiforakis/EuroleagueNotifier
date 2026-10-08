@@ -107,3 +107,18 @@ Measured in arm64 containers with nothing happening:
 |---|---|---|
 | PiButler | ~130 MB (limit 256 MB) | ~0% |
 | EuroleagueNotifier | ~30–45 MB (limit 128 MB) | ~0%, short bursts every ~45 s during live games |
+
+## Memory limits (Raspberry Pi 5)
+
+Raspberry Pi OS boots with `cgroup_disable=memory`, so Docker can't enforce the containers'
+`mem_limit` (`docker stats` shows 0 B). To enable it:
+
+```sh
+sudo cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
+sudo sed -i '1 s/$/ cgroup_enable=memory/' /boot/firmware/cmdline.txt   # must stay ONE line
+cat /boot/firmware/cmdline.txt
+sudo reboot
+```
+
+Then recreate the containers once so the limits are applied:
+`docker compose up -d --force-recreate` in each project folder (PiButler first).
