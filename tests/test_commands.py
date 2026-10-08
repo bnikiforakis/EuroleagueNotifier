@@ -300,7 +300,8 @@ async def test_final_stats_view(make):
     s = await make()
     text = (await s.action("s|37"))["text"]
     assert text.startswith(f"📊 <b>Final</b> · DUB 96{DASH}98 RED")
-    assert "FT%" in text and "PIR" in text
+    ft = next(line for line in text.splitlines() if line.startswith("FT "))
+    assert "/" in ft and "%)" in ft and "PIR" in text
 
 
 async def test_stats_unavailable(make):

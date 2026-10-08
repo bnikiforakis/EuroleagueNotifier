@@ -16,6 +16,7 @@ from euroleague_notifier.models import (
     Game,
     PlayerLine,
     TeamLine,
+    pct,
     period_label,
 )
 
@@ -75,33 +76,41 @@ def _period_table(game: Game, scores: list[tuple[int, int]]) -> str:
     return "<pre>" + "\n".join(rows) + "</pre>"
 
 
-def _fmt_pct(value: float | None) -> str:
-    return "-" if value is None else f"{value:.1f}"
+def shooting(made: int, attempted: int) -> str:
+    """``7/9 (77.8%)``: made/attempted and the percentage (``0/0 (-)`` when nothing was tried)."""
+    value = pct(made, attempted)
+    return f"{made}/{attempted} ({'-' if value is None else f'{value:.1f}%'})"
 
 
 StatRow = tuple[str, Callable[[TeamLine], str]]
 
 QUARTER_STATS: list[StatRow] = [
-    ("FG%", lambda t: _fmt_pct(t.fg_pct)),
-    ("3P%", lambda t: _fmt_pct(t.fg3_pct)),
+    ("FG", lambda t: shooting(t.fg2m + t.fg3m, t.fg2a + t.fg3a)),
+    ("2P", lambda t: shooting(t.fg2m, t.fg2a)),
+    ("3P", lambda t: shooting(t.fg3m, t.fg3a)),
+    ("FT", lambda t: shooting(t.ftm, t.fta)),
     ("REB", lambda t: str(t.rebounds)),
     ("AST", lambda t: str(t.assists)),
     ("TO", lambda t: str(t.turnovers)),
 ]
 FINAL_STATS: list[StatRow] = [
-    *QUARTER_STATS[:2],
-    ("FT%", lambda t: _fmt_pct(t.ft_pct)),
-    *QUARTER_STATS[2:4],
+    *QUARTER_STATS[:6],
     ("STL", lambda t: str(t.steals)),
-    QUARTER_STATS[4],
+    QUARTER_STATS[6],
     ("PIR", lambda t: str(t.pir)),
 ]
 
 
 def _team_table(game: Game, box: BoxScore, stats: list[StatRow]) -> str:
-    rows = [f"{'':<5}{escape(game.home.code):>7}{escape(game.away.code):>7}"]
-    rows += [f"{label:<5}{fmt(box.home):>7}{fmt(box.away):>7}" for label, fmt in stats]
+    # 3 + 14 + 14 = 31 characters: fits a phone screen with "35/70 (50.0%)" per team.
+    rows = [f"{'':<3}{escape(game.home.code):>14}{escape(game.away.code):>14}"]
+    rows += [f"{label:<3}{fmt(box.home):>14}{fmt(box.away):>14}" for label, fmt in stats]
     return "<pre>" + "\n".join(rows) + "</pre>"
+
+
+def periods_line(scores: list[tuple[int, int]], name: Callable[[int], str] = period_label) -> str:
+    """``Q1 22-18 · Q2 15-17`` (with en dashes)."""
+    return " · ".join(f"{name(i)} {h}{DASH}{a}" for i, (h, a) in enumerate(scores, 1))
 
 
 def _player(player: PlayerLine) -> str:
@@ -151,6 +160,35 @@ def score_line(
     return f"{home} {home_score}{DASH}{away_score} {away}"
 
 
+def _period_score(
+    box: BoxScore, period: int, score: tuple[int, int] | None
+) -> tuple[list[tuple[int, int]], int, int]:
+    scores = box.quarter_scores[:period]
+    home_score, away_score = box.home.points, box.away.points
+    if score is not None:
+        home_score, away_score = score
+    elif len(scores) == period:
+        home_score, away_score = sum(h for h, _ in scores), sum(a for _, a in scores)
+    return scores, home_score, away_score
+
+
+def _period_head(game: Game, period: int, home_score: int, away_score: int) -> str:
+    return f"🏀 <b>End of {period_label(period)}</b> · {score_line(game, home_score, away_score)}"
+
+
+def quarter_card(game: Game, box: BoxScore, period: int, score: tuple[int, int] | None = None) -> str:
+    """Compact end-of-period message for followers; the tables sit behind a Stats button."""
+    scores, home_score, away_score = _period_score(box, period, score)
+    head = _period_head(game, period, home_score, away_score)
+    return f"{head}\n{periods_line(scores)}" if scores else head
+
+
+def final_card(game: Game, box: BoxScore) -> str:
+    """Compact final for followers: result and score by period; the tables sit behind Stats."""
+    head = final_score(game, box)
+    return f"{head}\n{periods_line(box.quarter_scores)}" if box.quarter_scores else head
+
+
 def quarter_report(game: Game, box: BoxScore, period: int, score: tuple[int, int] | None = None) -> str:
     """Report sent when ``period`` (1-based; 5+ are overtimes) has ended.
 
@@ -158,14 +196,9 @@ def quarter_report(game: Game, box: BoxScore, period: int, score: tuple[int, int
     sum of the first ``period`` period scores, so a box score fetched a little after the buzzer still
     reports the end-of-period score; team stats are game-to-date.
     """
-    scores = box.quarter_scores[:period]
-    home_score, away_score = box.home.points, box.away.points
-    if score is not None:
-        home_score, away_score = score
-    elif len(scores) == period:
-        home_score, away_score = sum(h for h, _ in scores), sum(a for _, a in scores)
+    scores, home_score, away_score = _period_score(box, period, score)
     lines = [
-        f"🏀 <b>End of {period_label(period)}</b> · {score_line(game, home_score, away_score)}",
+        _period_head(game, period, home_score, away_score),
         "",
         *box_sections(game, box, scores, QUARTER_STATS),
     ]
@@ -229,8 +262,8 @@ def daily_schedule(games: list[Game]) -> str:
     round_text = f" · Round {rounds[0]}" if len(rounds) == 1 else ""
     return (
         f"📅 <b>Today's EuroLeague games</b>{round_text}\n\n"
-        "Tap a game to follow it: a reminder before tip-off, stats after every quarter and the "
-        "full box score at the end. For the rest you'll just get the start and the final score."
+        "Tap a game to follow it: a reminder before tip-off and a score card after every quarter, "
+        "with 📊 for the full stats. For the rest you'll just get the start and the final score."
     )
 
 

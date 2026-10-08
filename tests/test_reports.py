@@ -52,7 +52,8 @@ def test_quarter_report_uses_end_of_period_score():
     assert text.startswith(f"🏀 <b>End of Q2</b> · Paris 43{DASH}46 LDLC ASVEL")
     assert "Top scorers" in text
     assert "N. Hifi (PRS) <b>30</b>" in text
-    assert "FG%" in text and "3P%" in text and "TO" in text
+    table = text.split("Team stats")[1].split("<pre>")[1].split("</pre>")[0].splitlines()
+    assert [row.split()[0] for row in table[1:]] == ["FG", "2P", "3P", "FT", "REB", "AST", "TO"]
     assert "Q3" not in text
     assert max(pre_widths(text)) <= 32
 
@@ -84,7 +85,7 @@ def test_final_report_regulation():
     text = final_report(game, box)
     assert text.startswith(f"🏁 <b>FINAL</b> · Paris 96{DASH}98 <b>LDLC ASVEL</b>")
     assert "(OT)" not in text
-    for label in ("FG%", "3P%", "FT%", "REB", "AST", "STL", "TO", "PIR"):
+    for label in ("2P", "3P", "FT", "REB", "AST", "STL", "TO", "PIR"):
         assert label in text
     assert "T. Waters: 19 PTS, 2 REB, 3 AST, PIR 25" in text
 
@@ -135,3 +136,44 @@ def test_follow_model_messages():
     assert "96" in result and "98" in result and "<b>LDLC ASVEL</b>" in result and "Team stats" not in result
     assert schedule_label(game, False).startswith("☆ {{hm:") and schedule_label(game, True).startswith("⭐")
     assert "Round" in daily_schedule([game]) and "{{" not in daily_schedule([game])
+
+
+def test_shooting_shows_made_attempted_and_percentage():
+    from euroleague_notifier.reports import shooting
+
+    assert shooting(7, 9) == "7/9 (77.8%)"
+    assert shooting(0, 0) == "0/0 (-)"
+    assert shooting(35, 70) == "35/70 (50.0%)"
+    assert shooting(1, 8) == "1/8 (12.5%)" and shooting(1, 200) == "1/200 (0.5%)"
+
+
+def test_team_table_shows_made_attempted_for_every_shot_type():
+    game = games()[31]
+    box = parse_boxscore(load("live_Boxscore_E2026_31.json"))
+    text = final_report(game, box)
+    home, away = box.home, box.away
+    for label, (hm, ha), (am, aa) in (
+        (
+            "FG",
+            (home.fg2m + home.fg3m, home.fg2a + home.fg3a),
+            (away.fg2m + away.fg3m, away.fg2a + away.fg3a),
+        ),
+        ("2P", (home.fg2m, home.fg2a), (away.fg2m, away.fg2a)),
+        ("3P", (home.fg3m, home.fg3a), (away.fg3m, away.fg3a)),
+        ("FT", (home.ftm, home.fta), (away.ftm, away.fta)),
+    ):
+        row = next(line for line in text.splitlines() if line.startswith(label + " "))
+        assert f"{hm}/{ha}" in row and f"{am}/{aa}" in row
+    assert max(pre_widths(text)) <= 32
+
+
+def test_compact_cards_hold_score_and_periods_but_no_tables():
+    from euroleague_notifier.reports import final_card, quarter_card
+
+    game = games()[31]
+    box = parse_boxscore(load("live_Boxscore_E2026_31.json"))
+    card = quarter_card(game, box, 2)
+    assert card == f"🏀 <b>End of Q2</b> · Paris 43{DASH}46 LDLC ASVEL\nQ1 21{DASH}14 · Q2 22{DASH}32"
+    final = final_card(game, box)
+    assert final.startswith("🏁 <b>Final</b> · Paris 96") and "Q4 19" in final
+    assert "<pre>" not in card + final

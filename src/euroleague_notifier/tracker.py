@@ -85,7 +85,8 @@ def topic(game: Game) -> dict:
         "auto_follow": {"teams": [game.home.code, game.away.code]},
         "follow_text": (
             f"⭐ You're following <b>{escape(name)}</b> ({{{{hm:{reports.iso_z(game.tipoff)}}}}}).\n"
-            "You'll get a reminder before tip-off, stats after every quarter and the full box score."
+            "You'll get a reminder before tip-off, a score card after every quarter and the final result, "
+            "each with 📊 for the full stats."
         ),
         "unfollow_text": f"Unfollowed {name}",
     }
@@ -97,6 +98,11 @@ def follow_button(game: Game) -> dict:
         "label_active": "⭐ Following · tap to unfollow",
         "follow": game.identifier,
     }
+
+
+def stats_button(full_report: str) -> dict:
+    """Reveals the full tables on demand, keeping the notification itself compact."""
+    return {"label": "📊 Stats", "reveal": full_report}
 
 
 def followers(game: Game, following: bool = True) -> dict:
@@ -333,11 +339,14 @@ class Notifier:
                 return False
             await self._send(
                 key,
-                reports.quarter_report(game, box, period, state.score),
+                reports.quarter_card(game, box, period, state.score),
                 expires_at=reports.iso_z(self.now() + QUARTER_TTL),
                 topics=[topic(game)],
                 audience=followers(game),
-                buttons=[[follow_button(game)]],
+                buttons=[
+                    [stats_button(reports.quarter_report(game, box, period, state.score))],
+                    [follow_button(game)],
+                ],
             )
         return False
 
@@ -354,13 +363,14 @@ class Notifier:
         full = reports.final_report(game, box)
         url = reports.game_url(game, competition)
         link = [{"label": "🔗 Game center", "url": url}] if url else []
+        buttons = [[stats_button(full), *link]]
         if not await self.events.has(f"{gid}:final"):
             await self._send(
                 f"{gid}:final",
-                full,
+                reports.final_card(game, box),
                 topics=[topic(game)],
                 audience=followers(game),
-                buttons=[link] if link else None,
+                buttons=buttons,
             )
         if not await self.events.has(f"{gid}:result"):
             await self._send(
@@ -369,7 +379,7 @@ class Notifier:
                 tags={"kind": ["final"]},
                 topics=[topic(game)],
                 audience=followers(game, following=False),
-                buttons=[[{"label": "📊 Stats", "reveal": full}, *link]],
+                buttons=buttons,
             )
         return True
 

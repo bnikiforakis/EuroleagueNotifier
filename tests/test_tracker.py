@@ -150,8 +150,15 @@ async def test_who_gets_what(events):
     assert result["audience"] == {"topic": gid, "following": False}
     assert result["tags"] == {"kind": ["final"]}
     stats = result["buttons"][0][0]
-    assert stats["label"] == "📊 Stats" and stats["reveal"] == butler.get(":final")["text"]
-    assert "Team stats" not in result["text"] and "Team stats" in stats["reveal"]
+    assert stats["label"] == "📊 Stats" and "Team stats" in stats["reveal"]
+    assert "Team stats" not in result["text"]
+    # followers: compact cards too, with the same tables behind Stats
+    for suffix in (":p1", ":final"):
+        card = butler.get(suffix)
+        assert "<pre>" not in card["text"]
+        assert card["buttons"][0][0]["label"] == "📊 Stats" and "<pre>" in card["buttons"][0][0]["reveal"]
+    assert butler.get(":final")["buttons"][0][0]["reveal"] == stats["reveal"]
+    assert butler.get(":p1")["buttons"][1][0]["follow"] == gid  # unfollow toggle kept
     # every game message registers the topic, with auto-follow by team
     assert all(
         n["topics"][0]["auto_follow"] == {"teams": [GAME.home.code, GAME.away.code]} for n in butler.sent

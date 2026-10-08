@@ -132,9 +132,8 @@ def _clock_line(header: LiveHeader) -> str:
 
 
 def _periods_line(scores: list[tuple[int, int]], exact: bool = False) -> str:
-    """``Q1 22-18 · Q2 15-17``. ``exact`` periods name each overtime (OT1, OT2); the Header's don't."""
-    name = period_label if exact else _period_name
-    return " · ".join(f"{name(i)} {h}{reports.DASH}{a}" for i, (h, a) in enumerate(scores, 1))
+    """``exact`` periods name each overtime (OT1, OT2); the Header's lump them into one."""
+    return reports.periods_line(scores, period_label if exact else _period_name)
 
 
 def _started(scores: list[tuple[int, int]], header: LiveHeader | None) -> list[tuple[int, int]]:

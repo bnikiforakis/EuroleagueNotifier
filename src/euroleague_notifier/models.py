@@ -11,7 +11,7 @@ def period_label(period: int) -> str:
     return f"Q{period}" if period <= REGULATION_PERIODS else f"OT{period - REGULATION_PERIODS}"
 
 
-def _pct(made: int, attempted: int) -> float | None:
+def pct(made: int, attempted: int) -> float | None:
     return made / attempted * 100 if attempted else None
 
 
@@ -122,15 +122,15 @@ class TeamLine:
 
     @property
     def fg_pct(self) -> float | None:
-        return _pct(self.fg2m + self.fg3m, self.fg2a + self.fg3a)
+        return pct(self.fg2m + self.fg3m, self.fg2a + self.fg3a)
 
     @property
     def fg3_pct(self) -> float | None:
-        return _pct(self.fg3m, self.fg3a)
+        return pct(self.fg3m, self.fg3a)
 
     @property
     def ft_pct(self) -> float | None:
-        return _pct(self.ftm, self.fta)
+        return pct(self.ftm, self.fta)
 
 
 @dataclass(frozen=True)
