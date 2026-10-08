@@ -204,3 +204,35 @@ def schedule_digest(games: list[Game], title: str, time_format: str = "time") ->
             lines.append(f"<b>Round {round_number}</b>")
         lines += [_digest_line(g, time_format) for g in group]
     return "\n".join(lines)
+
+
+def title(game: Game) -> str:
+    """Plain-text game name for button labels and topic titles (not HTML)."""
+    return f"{game.home.short_name} vs {game.away.short_name}"
+
+
+def tipoff(game: Game) -> str:
+    home, away = _names(game)
+    return f"🏀 <b>Tip-off!</b> {home} vs {away}"
+
+
+def final_score(game: Game, box: BoxScore) -> str:
+    """One-line result for people who didn't follow the game."""
+    score = _score_line(game, box.home.points, box.away.points, bold_winner=True)
+    return f"🏁 <b>Final</b>{_ot_suffix(len(box.quarter_scores))} · {score}"
+
+
+def daily_schedule(games: list[Game]) -> str:
+    """Header of the daily schedule. The games themselves are its Follow buttons."""
+    rounds = sorted({g.round for g in games if g.round is not None})
+    round_text = f" · Round {rounds[0]}" if len(rounds) == 1 else ""
+    return (
+        f"📅 <b>Today's EuroLeague games</b>{round_text}\n\n"
+        "Tap a game to follow it: a reminder before tip-off, stats after every quarter and the "
+        "full box score at the end. For the rest you'll just get the start and the final score."
+    )
+
+
+def schedule_label(game: Game, following: bool) -> str:
+    star = "⭐" if following else "☆"
+    return f"{star} {{{{hm:{iso_z(game)}}}}} {game.home.short_name} {DASH} {game.away.short_name}"

@@ -134,3 +134,15 @@ def test_game_url():
         "partizan-mozzart-bet-belgrade-valencia-basket/E2025/340/"
     )
     assert game_url(games()[31], "U") is None
+
+
+def test_follow_model_messages():
+    from euroleague_notifier.reports import daily_schedule, final_score, schedule_label, tipoff, title
+
+    game, box = games()[31], parse_boxscore(load("live_Boxscore_E2026_31.json"))
+    assert title(game) == "Paris vs LDLC ASVEL"
+    assert "Tip-off" in tipoff(game)
+    result = final_score(game, box)
+    assert "96" in result and "98" in result and "<b>LDLC ASVEL</b>" in result and "Team stats" not in result
+    assert schedule_label(game, False).startswith("☆ {{hm:") and schedule_label(game, True).startswith("⭐")
+    assert "Round" in daily_schedule([game]) and "{{" not in daily_schedule([game])

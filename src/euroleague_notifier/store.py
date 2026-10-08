@@ -1,6 +1,6 @@
 """Which notifications have already been sent (SQLite).
 
-Keys look like ``E2026_32:reminder``, ``E2026_32:p2``, ``E2026_32:final``, ``digest:2026-10-08``.
+Keys look like ``E2026_32:reminder``, ``E2026_32:p2``, ``E2026_32:final``, ``schedule:2026-10-08``.
 A key is recorded *after* PiButler accepted the notification; PiButler dedupes on the same key,
 so a crash in between can't produce a duplicate (ADR-006).
 """

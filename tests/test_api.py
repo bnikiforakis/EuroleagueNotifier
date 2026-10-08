@@ -195,3 +195,8 @@ async def test_client_does_not_retry_4xx():
         with pytest.raises(ApiError):
             await client.clubs("E", "E2026")
     assert len(calls) == 1
+
+
+def test_period_state_before_first_begin_period_is_not_started():
+    pbp = {"ActualQuarter": 1, **{section: [] for section in PBP_SECTIONS}}
+    assert parse_period_state(pbp).current_period == 0

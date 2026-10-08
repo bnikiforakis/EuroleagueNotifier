@@ -138,6 +138,8 @@ def parse_period_state(payload: Any) -> PeriodState:
     begun, ended, game_over = types.count("BP"), types.count("EP"), "EG" in types
     if game_over:
         ended = max(ended, begun)
+    if begun == 0:  # nothing has started yet, whatever ActualQuarter says before tip-off
+        return PeriodState(ended_periods=ended, game_over=game_over, current_period=0)
     actual = payload.get("ActualQuarter")
     current = _int(actual) if actual not in (None, "") else begun
     return PeriodState(ended_periods=ended, game_over=game_over, current_period=max(current, begun))

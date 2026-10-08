@@ -15,7 +15,7 @@ class Settings:
     season_year: int = 2026
     reminder_minutes: int = 30
     poll_seconds: int = 45
-    digest_time: time = time(9, 0)
+    digest_time: time = time(12, 0)
     digest_timezone: str = "Europe/Athens"
     db_path: str = "/data/euroleague_notifier.db"
     log_level: str = "INFO"
@@ -37,7 +37,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         season_year=int(env.get("SEASON_YEAR", "2026")),
         reminder_minutes=int(env.get("REMINDER_MINUTES", "30")),
         poll_seconds=int(env.get("POLL_SECONDS", "45")),
-        digest_time=time.fromisoformat(env.get("DIGEST_TIME", "09:00")),
+        digest_time=time.fromisoformat(env.get("DIGEST_TIME", "12:00")),
         digest_timezone=env.get("DIGEST_TIMEZONE", "Europe/Athens"),
         db_path=env.get("DB_PATH", "/data/euroleague_notifier.db"),
         log_level=env.get("LOG_LEVEL", "INFO"),

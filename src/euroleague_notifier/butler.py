@@ -60,17 +60,19 @@ class ButlerClient:
         await self._request("PUT", "/manifest", manifest)
 
     async def notify(
-        self, key: str, text: str, tags: dict[str, list[str]], expires_at: str | None = None
+        self,
+        key: str,
+        text: str,
+        tags: dict[str, list[str]] | None = None,
+        expires_at: str | None = None,
+        *,
+        topics: list[dict] | None = None,
+        audience: dict | None = None,
+        buttons: list[list[dict]] | None = None,
     ) -> dict:
-        result = await self._request(
-            "POST",
-            "/notifications",
-            {"idempotency_key": key, "text": text, "tags": tags, "expires_at": expires_at},
-        )
-        log.info(
-            "notified %s → %s recipients%s",
-            key,
-            result.get("recipients"),
-            " (duplicate)" if result.get("duplicate") else "",
-        )
+        body = {"idempotency_key": key, "text": text, "tags": tags or {}, "expires_at": expires_at}
+        body |= {k: v for k, v in (("topics", topics), ("audience", audience), ("buttons", buttons)) if v}
+        result = await self._request("POST", "/notifications", body)
+        dup = " (duplicate)" if result.get("duplicate") else ""
+        log.info("notified %s → %s recipients%s", key, result.get("recipients"), dup)
         return result

@@ -1,4 +1,10 @@
-"""Schedule sync, per-game tracking and notification decisions (ADR-008).
+"""Schedule sync, per-game tracking and notification decisions (ADR-008, ADR-014).
+
+Who gets what:
+- everyone: the daily schedule (one Follow button per game), a tip-off message (with Follow),
+  and for games they don't follow, the final score with a 📊 Stats button;
+- followers of a game (pressed Follow, or auto-follow by favourite team): a reminder before
+  tip-off, a report after every quarter and the full final report.
 
 Idle cost is near zero: the schedule is refreshed every couple of hours, and each game gets a
 task that sleeps until its reminder / tip-off, polls every ~45 s while live, then exits.
@@ -8,6 +14,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from html import escape
 from zoneinfo import ZoneInfo
 
 from euroleague_notifier import reports
@@ -21,9 +28,8 @@ log = logging.getLogger(__name__)
 
 KINDS = [
     {"value": "schedule", "label": "Daily schedule"},
-    {"value": "reminder", "label": "Tip-off reminder"},
-    {"value": "quarter", "label": "Quarter reports"},
-    {"value": "final", "label": "Final report"},
+    {"value": "start", "label": "Game start"},
+    {"value": "final", "label": "Final scores"},
 ]
 SCHEDULE_REFRESH = timedelta(hours=2)
 LOOP_INTERVAL = timedelta(minutes=10)
@@ -45,18 +51,15 @@ def _iso(dt: datetime) -> str:
 
 
 def build_manifest(clubs: list[Club]) -> dict:
-    unique = {c.code: c for c in clubs}
+    unique = sorted({c.code: c for c in clubs}.values(), key=lambda c: c.short_name)
     return {
         "name": "EuroLeague",
         "settings": [
             {
                 "key": "teams",
-                "label": "Teams",
-                "all_label": "All teams",
-                "options": [
-                    {"value": c.code, "label": c.short_name}
-                    for c in sorted(unique.values(), key=lambda c: c.short_name)
-                ],
+                "label": "Auto-follow teams",
+                "default": [],  # not "All": auto-following everything would follow every game
+                "options": [{"value": c.code, "label": c.short_name} for c in unique],
             },
             {
                 "key": "kind",
@@ -68,8 +71,30 @@ def build_manifest(clubs: list[Club]) -> dict:
     }
 
 
-def tags(game: Game, kind: str) -> dict[str, list[str]]:
-    return {"teams": [game.home.code, game.away.code], "kind": [kind]}
+def topic(game: Game) -> dict:
+    name = reports.title(game)
+    return {
+        "id": game.identifier,
+        "title": name,
+        "auto_follow": {"teams": [game.home.code, game.away.code]},
+        "follow_text": (
+            f"⭐ You're following <b>{escape(name)}</b> ({{{{hm:{reports.iso_z(game)}}}}}).\n"
+            "You'll get a reminder before tip-off, stats after every quarter and the full box score."
+        ),
+        "unfollow_text": f"Unfollowed {name}",
+    }
+
+
+def follow_button(game: Game) -> dict:
+    return {
+        "label": "☆ Follow this game",
+        "label_active": "⭐ Following · tap to unfollow",
+        "follow": game.identifier,
+    }
+
+
+def followers(game: Game, following: bool = True) -> dict:
+    return {"topic": game.identifier, "following": following}
 
 
 class Notifier:
@@ -130,10 +155,10 @@ class Notifier:
         if self._schedule_at is None or now - self._schedule_at >= SCHEDULE_REFRESH:
             await self.refresh_schedule()
             self._schedule_at = now
-        await self.maybe_send_digest()
+        await self.maybe_send_schedule()
         for gid, (comp, game) in self._games.items():
             running = gid in self._tasks and not self._tasks[gid].done()
-            if not running and self._should_track(game, now) and not await self.events.has(f"{gid}:final"):
+            if not running and self._should_track(game, now) and not await self._finished(gid):
                 log.info(
                     "%s: tracking %s vs %s (tip-off %s)",
                     gid,
@@ -154,22 +179,43 @@ class Notifier:
     def _should_track(self, game: Game, now: datetime) -> bool:
         return now - MAX_GAME_LENGTH < game.tipoff < now + LOOKAHEAD
 
-    # --- daily digest ------------------------------------------------------------------------
+    async def _finished(self, gid: str) -> bool:
+        return await self.events.has(f"{gid}:final") and await self.events.has(f"{gid}:result")
 
-    async def maybe_send_digest(self) -> None:
+    # --- daily schedule ----------------------------------------------------------------------
+
+    async def maybe_send_schedule(self) -> None:
         tz = ZoneInfo(self.settings.digest_timezone)
         local_now = self.now().astimezone(tz)
         if local_now.time() < self.settings.digest_time:
             return
-        today = [g for _, g in self._games.values() if g.tipoff.astimezone(tz).date() == local_now.date()]
-        if not today or all(g.tipoff <= self.now() for g in today):
-            return  # no games, or too late for a "today" digest to be useful
-        key = f"digest:{local_now.date().isoformat()}"
+        today = sorted(
+            (g for _, g in self._games.values() if g.tipoff.astimezone(tz).date() == local_now.date()),
+            key=lambda g: (g.tipoff, g.code),
+        )
+        upcoming = [g for g in today if g.tipoff > self.now()]
+        if not upcoming:
+            return  # no games today, or all already started
+        key = f"schedule:{local_now.date().isoformat()}"
         if await self.events.has(key):
             return
-        teams = sorted({c for g in today for c in (g.home.code, g.away.code)})
-        text = reports.schedule_digest(today, "Today's EuroLeague games", time_format="hm")
-        await self._send(key, text, {"teams": teams, "kind": ["schedule"]})
+        buttons = [
+            [
+                {
+                    "label": reports.schedule_label(g, False),
+                    "label_active": reports.schedule_label(g, True),
+                    "follow": g.identifier,
+                }
+            ]
+            for g in upcoming
+        ]
+        await self._send(
+            key,
+            reports.daily_schedule(upcoming),
+            tags={"kind": ["schedule"]},
+            topics=[topic(g) for g in upcoming],
+            buttons=buttons,
+        )
 
     # --- per-game tracking -------------------------------------------------------------------
 
@@ -200,38 +246,84 @@ class Notifier:
         if self.now() < game.tipoff and not await self.events.has(key):
             try:
                 await self._send(
-                    key, reports.reminder(game, minutes), tags(game, "reminder"), _iso(game.tipoff)
+                    key,
+                    reports.reminder(game, minutes),
+                    expires_at=_iso(game.tipoff),
+                    topics=[topic(game)],
+                    audience=followers(game),
+                    buttons=[[follow_button(game)]],
                 )
             except ButlerError as exc:
                 log.warning("%s: reminder failed: %s", game.identifier, exc)
 
     async def poll(self, competition: str, game: Game) -> bool:
-        """One live poll. Returns True once the game is over and the final report is out."""
+        """One live poll. Returns True once the game is over and both final messages are out."""
         season, gid = game.season, game.identifier
         state = await self.el.period_state(season, game.code)
         if state.game_over:
-            if not await self.events.has(f"{gid}:final"):
-                box = await self.el.boxscore(season, game.code)
-                if box is None:
-                    return False
-                url = reports.game_url(game, competition)
-                await self._send(f"{gid}:final", reports.final_report(game, box, url), tags(game, "final"))
-            return True
-        last = await self.events.last_period(gid)
-        if state.ended_periods > last:
+            return await self._finals(competition, game)
+        if (
+            state.current_period >= 1
+            and state.ended_periods == 0
+            and not await self.events.has(f"{gid}:start")
+        ):
+            await self._send(
+                f"{gid}:start",
+                reports.tipoff(game),
+                tags={"kind": ["start"]},
+                expires_at=_iso(self.now() + QUARTER_TTL),
+                topics=[topic(game)],
+                buttons=[[follow_button(game)]],
+            )
+        if state.ended_periods > await self.events.last_period(gid):
             # Only the latest ended period: after a restart we don't replay old quarters.
             period = state.ended_periods
             box = await self.el.boxscore(season, game.code)
             if box is None:
                 return False
-            expires = _iso(self.now() + QUARTER_TTL)
             await self._send(
-                f"{gid}:p{period}", reports.quarter_report(game, box, period), tags(game, "quarter"), expires
+                f"{gid}:p{period}",
+                reports.quarter_report(game, box, period),
+                expires_at=_iso(self.now() + QUARTER_TTL),
+                topics=[topic(game)],
+                audience=followers(game),
+                buttons=[[follow_button(game)]],
             )
         return False
 
-    async def _send(self, key: str, text: str, tag: dict, expires_at: str | None = None) -> None:
-        await self.butler.notify(key, text, tag, expires_at)
+    async def _finals(self, competition: str, game: Game) -> bool:
+        gid = game.identifier
+        if await self._finished(gid):
+            return True
+        box = await self.el.boxscore(game.season, game.code)
+        if box is None:
+            return False
+        full = reports.final_report(game, box)
+        url = reports.game_url(game, competition)
+        link = [{"label": "🔗 Game center", "url": url}] if url else []
+        if not await self.events.has(f"{gid}:final"):
+            await self._send(
+                f"{gid}:final",
+                full,
+                topics=[topic(game)],
+                audience=followers(game),
+                buttons=[link] if link else None,
+            )
+        if not await self.events.has(f"{gid}:result"):
+            await self._send(
+                f"{gid}:result",
+                reports.final_score(game, box),
+                tags={"kind": ["final"]},
+                topics=[topic(game)],
+                audience=followers(game, following=False),
+                buttons=[[{"label": "📊 Stats", "reveal": full}, *link]],
+            )
+        return True
+
+    async def _send(
+        self, key: str, text: str, tags: dict | None = None, expires_at: str | None = None, **extra
+    ) -> None:
+        await self.butler.notify(key, text, tags, expires_at, **extra)
         await self.events.add(key)
 
     async def _sleep_until(self, when: datetime) -> None:
