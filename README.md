@@ -6,7 +6,8 @@ with stats, for the teams you follow.
 It runs 24/7 on a Raspberry Pi and delivers messages through
 [PiButler](https://github.com/bnikiforakis/PiButler), an invite-only Telegram bot gateway.
 
-> Work in progress. To run it on a Raspberry Pi, see [docs/PI_SETUP.md](docs/PI_SETUP.md).
+> Work in progress. To run it on a Raspberry Pi, see [docs/PI_SETUP.md](docs/PI_SETUP.md);
+> to ship updates to it, see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Development
 
