@@ -31,13 +31,14 @@ for repo in "${REPOS[@]}"; do
     after=\$(git rev-parse --short HEAD)
     echo \"   code: \$before -> \$after\"
     docker compose up -d --build --quiet-pull 2>&1 | grep -E 'Started|Recreated|Running|Error' || true
-    service=\$(docker compose config --services | head -1)
-    for _ in \$(seq 1 30); do
-      health=\$(docker inspect -f '{{.State.Health.Status}}' \"\$service\" 2>/dev/null || echo missing)
-      [ \"\$health\" = healthy ] && break
-      sleep 5
-    done
-    echo \"   \$service: \$health\"
-    [ \"\$health\" = healthy ] || { docker compose logs --tail 30; exit 1; }"
+    for service in \$(docker compose config --services); do
+      for _ in \$(seq 1 30); do
+        health=\$(docker inspect -f '{{.State.Health.Status}}' \"\$service\" 2>/dev/null || echo missing)
+        [ \"\$health\" = healthy ] && break
+        sleep 5
+      done
+      echo \"   \$service: \$health\"
+      [ \"\$health\" = healthy ] || { docker compose logs --tail 30 \"\$service\"; exit 1; }
+    done"
 done
 echo "Deployed."
