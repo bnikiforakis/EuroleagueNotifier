@@ -68,16 +68,17 @@ def _box(label: str, rows: list[str]) -> str:
     return f'<pre><code class="language-{label}">' + "\n".join(rows) + "</code></pre>"
 
 
+def _team_header(game: Game) -> str:
+    """Column headers with the teams' names (at most 13 characters, so columns stay apart)."""
+    home, away = (escape(c.short_name[:13]) for c in (game.home, game.away))
+    return f"{'':<3}{home:>14}{away:>14}"
+
+
 def _period_table(game: Game, scores: list[tuple[int, int]]) -> str:
-    head = "".join(f"{period_label(i):>4}" for i in range(1, len(scores) + 1))
-    home = "".join(f"{h:>4}" for h, _ in scores)
-    away = "".join(f"{a:>4}" for _, a in scores)
-    total_h, total_a = sum(h for h, _ in scores), sum(a for _, a in scores)
-    rows = [
-        f"{'':<3}{head}{'T':>5}",
-        f"{escape(game.home.code):<3}{home}{total_h:>5}",
-        f"{escape(game.away.code):<3}{away}{total_a:>5}",
-    ]
+    # One row per period (overtimes just add rows), same 31-character layout as the team table.
+    rows = [_team_header(game)]
+    rows += [f"{period_label(i):<3}{h:>14}{a:>14}" for i, (h, a) in enumerate(scores, 1)]
+    rows.append(f"{'T':<3}{sum(h for h, _ in scores):>14}{sum(a for _, a in scores):>14}")
     return _box("Score by quarter", rows)
 
 
@@ -108,7 +109,7 @@ FINAL_STATS: list[StatRow] = [
 
 def _team_table(game: Game, box: BoxScore, stats: list[StatRow]) -> str:
     # 3 + 14 + 14 = 31 characters: fits a phone screen with "35/70 (50.0%)" per team.
-    rows = [f"{'':<3}{escape(game.home.code):>14}{escape(game.away.code):>14}"]
+    rows = [_team_header(game)]
     rows += [f"{label:<3}{fmt(box.home):>14}{fmt(box.away):>14}" for label, fmt in stats]
     return _box("Team stats", rows)
 
@@ -122,10 +123,12 @@ def _player(player: PlayerLine) -> str:
     return escape(player.short_name)
 
 
-def _top_scorers(box: BoxScore, limit: int = 3) -> list[str]:
+def _top_scorers(game: Game, box: BoxScore, limit: int = 3) -> list[str]:
+    names = {c.code: c.short_name for c in (game.home, game.away)}
     ranked = sorted(box.players, key=lambda p: (-p.points, -p.pir))[:limit]
     return [
-        f"{i}. {_player(p)} ({escape(p.team_code)}) <b>{p.points}</b>" for i, p in enumerate(ranked, start=1)
+        f"{i}. {_player(p)} ({escape(names.get(p.team_code, p.team_code))}) <b>{p.points}</b>"
+        for i, p in enumerate(ranked, start=1)
     ]
 
 
@@ -134,9 +137,9 @@ def _top_performers(players: list[PlayerLine], limit: int = 3) -> list[str]:
     return [f"• {_player(p)}: {p.points} PTS, {p.rebounds} REB, {p.assists} AST, PIR {p.pir}" for p in ranked]
 
 
-def code_score(game: Game, home_score: int, away_score: int) -> str:
-    """Compact plain-text score with club codes, e.g. ``PAN 45-41 FEN`` (en dash)."""
-    return f"{game.home.code} {home_score}{DASH}{away_score} {game.away.code}"
+def plain_score(game: Game, home_score: int, away_score: int) -> str:
+    """Plain-text score with team names, e.g. ``Panathinaikos 45-41 Fenerbahce`` (en dash)."""
+    return f"{game.home.short_name} {home_score}{DASH}{away_score} {game.away.short_name}"
 
 
 def box_sections(game: Game, box: BoxScore, scores: list[tuple[int, int]], stats: list[StatRow]) -> list[str]:
@@ -144,7 +147,7 @@ def box_sections(game: Game, box: BoxScore, scores: list[tuple[int, int]], stats
     return [
         _period_table(game, scores),
         "🔥 <b>Top scorers</b>",
-        *_top_scorers(box),
+        *_top_scorers(game, box),
         "",
         _team_table(game, box, stats),  # labelled "Team stats" by its box
     ]
@@ -289,4 +292,4 @@ def daily_results(games: list[Game], day: date, missing: int = 0) -> str:
 
 def result_label(game: Game, box: BoxScore) -> str:
     """Button label such as ``✅ PAN 88-80 FEN (OT)`` (en dash)."""
-    return f"✅ {code_score(game, box.home.points, box.away.points)}{ot_suffix(len(box.quarter_scores))}"
+    return f"✅ {plain_score(game, box.home.points, box.away.points)}{ot_suffix(len(box.quarter_scores))}"

@@ -181,10 +181,10 @@ async def test_score_lists_todays_games_by_tipoff(make):
     reply = await s.command()
     assert reply["text"] == "🏀 <b>Today's EuroLeague games</b>\n\nTap a game for the live score."
     assert labels(reply) == [
-        f"✅ TEL 96{DASH}98 MIL",
-        f"✅ DUB 96{DASH}98 RED",
-        f"🔴 MUN 45{DASH}41 VIR · Q4 01:00",
-        f"🔴 PAN 45{DASH}41 ULK · Q3 05:12",
+        f"✅ Maccabi 96{DASH}98 Milan",
+        f"✅ Dubai 96{DASH}98 Crvena Zvezda",
+        f"🔴 Bayern Munich 45{DASH}41 Virtus Bologna · Q4 01:00",
+        f"🔴 Panathinaikos 45{DASH}41 Fenerbahce · Q3 05:12",
         f"⏳ {{{{hm:2026-10-08T18:30:00Z}}}} Valencia {DASH} Hapoel TLV",
         f"⏳ {{{{hm:2026-10-08T18:45:00Z}}}} Real Madrid {DASH} Partizan",
     ]
@@ -195,13 +195,13 @@ async def test_score_lists_todays_games_by_tipoff(make):
 
 async def test_break_shows_break_instead_of_clock(make):
     s = await make(FakeEuroleague({36: live_header(quarter="", remaining="10:00")}))
-    assert f"🔴 PAN 45{DASH}41 ULK · Break" in labels(await s.command())
+    assert f"🔴 Panathinaikos 45{DASH}41 Fenerbahce · Break" in labels(await s.command())
 
 
 async def test_finished_from_event_store_even_if_header_still_live(make):
     s = await make()
     await s.events.add(f"{BY_CODE[36].identifier}:final")
-    assert f"✅ PAN 45{DASH}41 ULK" in labels(await s.command())
+    assert f"✅ Panathinaikos 45{DASH}41 Fenerbahce" in labels(await s.command())
 
 
 async def test_today_is_the_users_date_and_live_games_from_yesterday_stay(make):
@@ -209,7 +209,7 @@ async def test_today_is_the_users_date_and_live_games_from_yesterday_stay(make):
     # the other recent games are over and belong to yesterday.
     headers = {33: FINAL_HEADER, 36: FINAL_HEADER, 35: live_header("4", "00:30")}
     s = await make(FakeEuroleague(headers), now=datetime(2026, 10, 8, 22, 10, tzinfo=UTC))
-    assert labels(await s.command()) == [f"🔴 MAD 45{DASH}41 PAR · Q4 00:30"]
+    assert labels(await s.command()) == [f"🔴 Real Madrid 45{DASH}41 Partizan · Q4 00:30"]
 
 
 async def test_no_games_today_shows_next_game(make):
@@ -289,7 +289,9 @@ async def test_upcoming_game_view_has_no_stats(make):
 async def test_live_stats_view(make):
     s = await make(FakeEuroleague(boxes={36: replace(BOX, live=True)}))
     reply = await s.action("s|36")
-    assert reply["text"].startswith(f"📊 <b>Live stats</b> · Q3 05:12 · PAN 45{DASH}41 ULK\n\n<pre>")
+    assert reply["text"].startswith(
+        f"📊 <b>Live stats</b> · Q3 05:12 · Panathinaikos 45{DASH}41 Fenerbahce\n\n<pre>"
+    )
     assert "🔥 <b>Top scorers</b>" in reply["text"] and 'class="language-Team stats"' in reply["text"]
     assert "Q4" not in reply["text"]  # periods sliced to the ones under way
     assert actions(reply) == [["s|36", "g|36"]]
@@ -299,7 +301,7 @@ async def test_live_stats_view(make):
 async def test_final_stats_view(make):
     s = await make()
     text = (await s.action("s|37"))["text"]
-    assert text.startswith(f"📊 <b>Final</b> · DUB 96{DASH}98 RED")
+    assert text.startswith(f"📊 <b>Final</b> · Dubai 96{DASH}98 Crvena Zvezda")
     ft = next(line for line in text.splitlines() if line.startswith("FT "))
     assert "/" in ft and "%)" in ft and "PIR" in text
 

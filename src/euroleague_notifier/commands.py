@@ -254,7 +254,7 @@ class Scoreboard:
             text = UNAVAILABLE if status.state == "unknown" else "No stats yet: the game hasn't started."
             return Reply(f"📊 {_matchup(game)}\n\n{text}", buttons)
         home, away = status.score or (box.home.points, box.away.points)
-        score = escape(reports.code_score(game, home, away))
+        score = escape(reports.plain_score(game, home, away))
         if status.state == "live" and status.header:
             header = status.header
             head = f"📊 <b>Live stats</b> · {_clock(header)} · {score}"
@@ -282,9 +282,9 @@ class Scoreboard:
         names = f"{game.home.short_name} {reports.DASH} {game.away.short_name}"
         hm = f"{{{{hm:{reports.iso_z(game.tipoff)}}}}} "
         if status.state == "live" and status.header:
-            return _fit("🔴 ", f"{reports.code_score(game, *status.score)} · {_clock(status.header)}")
+            return _fit("🔴 ", f"{reports.plain_score(game, *status.score)} · {_clock(status.header)}")
         if status.state == "final" and status.score:
-            return _fit("✅ ", reports.code_score(game, *status.score))
+            return _fit("✅ ", reports.plain_score(game, *status.score))
         if status.state == "final":
             return _fit("✅ ", names)
         return _fit(("⏳ " if status.state == "upcoming" else "🏀 ") + hm, names)

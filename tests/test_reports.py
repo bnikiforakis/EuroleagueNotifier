@@ -52,7 +52,7 @@ def test_quarter_report_uses_end_of_period_score():
     text = quarter_report(game, box, 2)
     assert text.startswith(f"🏀 <b>End of Q2</b> · Paris 43{DASH}46 LDLC ASVEL")
     assert "Top scorers" in text
-    assert "N. Hifi (PRS) <b>30</b>" in text
+    assert "N. Hifi (Paris) <b>30</b>" in text
     table = text.split('<code class="language-Team stats">')[1].split("</code></pre>")[0].splitlines()
     assert [row.split()[0] for row in table[1:]] == ["FG", "2P", "3P", "FT", "REB", "AST", "TO"]
     assert "Q3" not in text
@@ -191,3 +191,14 @@ def test_tables_are_labelled_boxes():
         assert '<pre><code class="language-Team stats">' in text
         assert "<b>Team stats</b>" not in text  # the box label replaces the old heading
         assert text.count("<pre>") == text.count("</code></pre>") == 2
+
+
+def test_reports_use_team_names_not_club_codes():
+    game, box = games()[31], parse_boxscore(load("live_Boxscore_E2026_31.json"))
+    two_ot_game, two_ot = double_ot_game(), parse_boxscore(load("live_Boxscore_E2025_340.json"))
+    for g, b in ((game, box), (two_ot_game, two_ot)):
+        text = final_report(g, b) + quarter_report(g, b, 2)
+        for code in (g.home.code, g.away.code):
+            assert not re.search(rf"\b{code}\b", text), code
+        assert g.home.short_name in text and g.away.short_name in text
+        assert max(pre_widths(text)) <= 32

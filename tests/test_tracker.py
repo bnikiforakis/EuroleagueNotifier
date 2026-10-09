@@ -481,7 +481,7 @@ async def test_nightly_results_after_one_am_with_a_stats_button_per_game(events)
     assert msg["silent"] and msg["tags"] == {"daily": ["results"]} and msg.get("audience") is None
     assert "EuroLeague results</b> · Thu 8 Oct" in msg["text"]  # the games' day, not "today"
     (first,), (second,) = msg["buttons"]
-    assert first["label"].startswith(f"✅ {GAME.home.code} ")  # in tip-off order
+    assert first["label"].startswith(f"✅ {GAME.home.short_name} ")  # in tip-off order
     assert "Team stats" in first["reveal"] and "Team stats" in second["reveal"]
 
 
