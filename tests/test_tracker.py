@@ -241,7 +241,7 @@ async def test_register_builds_manifest_from_clubs(events):
 
 def test_manifest_dedupes_clubs_across_competitions():
     clubs = parse_clubs(load("v2_clubs_E2026.json"))
-    assert len(build_manifest(clubs + clubs)["settings"][0]["options"]) == 20
+    assert len(build_manifest(clubs + clubs, "EuroLeague", "score")["settings"][0]["options"]) == 20
 
 
 async def test_event_store_last_period(events):
@@ -554,3 +554,13 @@ async def test_evening_results_time_covers_the_same_day(events):
     await notifier.refresh_schedule()
     await notifier.maybe_send_results()  # 23:45 Athens on Oct 8
     assert butler.keys == ["results:2026-10-08"]
+
+
+def test_score_command_is_validated():
+    from euroleague_notifier.config import load_settings
+
+    env = {"PIBUTLER_URL": "http://x", "PIBUTLER_API_KEY": "k"}
+    assert load_settings(env | {"SCORE_COMMAND": "/eurocup"}).score_command == "eurocup"
+    for bad in ("EuroCup", "", "euro cup"):
+        with pytest.raises(SystemExit):
+            load_settings(env | {"SCORE_COMMAND": bad})

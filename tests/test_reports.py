@@ -8,6 +8,8 @@ from euroleague_notifier.api import parse_boxscore, parse_games
 from euroleague_notifier.models import Club, Game
 from euroleague_notifier.reports import (
     DASH,
+    daily_results,
+    daily_schedule,
     final_report,
     game_url,
     iso_z,
@@ -124,7 +126,12 @@ def test_game_url():
         "https://www.euroleaguebasketball.net/en/euroleague/game-center/2025-26/"
         "partizan-mozzart-bet-belgrade-valencia-basket/E2025/340/"
     )
-    assert game_url(games()[31], "U") is None
+    eurocup = replace(games()[31], season="U2026")
+    assert game_url(eurocup, "U") == (
+        "https://www.euroleaguebasketball.net/en/eurocup/game-center/2026-27/"
+        "paris-basketball-ldlc-asvel-villeurbanne/U2026/31/"
+    )
+    assert game_url(games()[31], "X") is None
 
 
 def test_follow_model_messages():
@@ -136,10 +143,11 @@ def test_follow_model_messages():
     result = final_score(game, box)
     assert "96" in result and "98" in result and "<b>LDLC ASVEL</b>" in result and "Team stats" not in result
     assert schedule_label(game, False).startswith("☆ {{hm:") and schedule_label(game, True).startswith("⭐")
-    assert "Round" in daily_schedule([game]) and "{{" not in daily_schedule([game])
+    text = daily_schedule([game], "EuroLeague")
+    assert "Round" in text and "{{" not in text
     from datetime import time
 
-    assert "All results arrive at 01:00." in daily_schedule([game], time(1, 0))
+    assert "All results arrive at 01:00." in daily_schedule([game], "EuroLeague", time(1, 0))
 
 
 def test_shooting_shows_made_attempted_and_percentage():
@@ -202,3 +210,13 @@ def test_reports_use_team_names_not_club_codes():
             assert not re.search(rf"\b{code}\b", text), code
         assert g.home.short_name in text and g.away.short_name in text
         assert max(pre_widths(text)) <= 32
+
+
+def test_headers_use_the_competition_name():
+    from datetime import date
+
+    game = games()[31]
+    assert "Today's EuroCup games" in daily_schedule([game], "EuroCup")
+    assert "EuroCup results</b>" in daily_results([game], date(2026, 10, 8), "EuroCup", "eurocup")
+    missing = daily_results([game], date(2026, 10, 8), "EuroCup", "eurocup", missing=2)
+    assert "see /eurocup" in missing and "/score" not in missing

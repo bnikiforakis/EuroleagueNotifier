@@ -337,8 +337,29 @@ async def test_manifest_includes_command_and_callback(make):
     s = await make()
     await s.notifier.register()
     manifest = s.notifier.butler.manifest
-    assert manifest["commands"] == [{"command": "score", "description": "Live scores of today's games"}]
+    assert manifest["commands"] == [
+        {"command": "score", "description": "Live scores of today's EuroLeague games"}
+    ]
     assert manifest["callback_url"] == "http://euroleague-notifier:8081/pibutler"
+
+
+async def test_eurocup_instance_answers_its_own_command(make):
+    s = await make(competitions=("U",))
+    s.notifier.settings = replace(s.notifier.settings, project_name="EuroCup", score_command="eurocup")
+    future = replace(BY_CODE[34], season="U2026", tipoff=datetime(2026, 10, 13, 16, 0, tzinfo=UTC))
+
+    async def eurocup_games(competition, season):
+        return [future] if competition == "U" else []
+
+    s.notifier.el.games = eurocup_games
+    await s.notifier.refresh_schedule()
+    await s.notifier.register()
+    assert s.notifier.butler.manifest["name"] == "EuroCup"
+    assert s.notifier.butler.manifest["commands"][0]["command"] == "eurocup"
+    reply = await s.post({"type": "command", "command": "eurocup", "args": "", "user": ATHENS})
+    assert "Today's EuroCup games" in reply["text"] and "No EuroCup games today." in reply["text"]
+    other = await s.post({"type": "command", "command": "score", "args": "", "user": ATHENS})
+    assert "EuroCup games" not in other["text"] and "/eurocup" in other["text"]
 
 
 def test_callback_path():

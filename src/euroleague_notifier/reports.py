@@ -21,7 +21,7 @@ from euroleague_notifier.models import (
 )
 
 SITE = "https://www.euroleaguebasketball.net/en"
-COMPETITION_PATHS = {"E": "euroleague"}
+COMPETITION_PATHS = {"E": "euroleague", "U": "eurocup"}
 DASH = "\N{EN DASH}"
 
 
@@ -38,8 +38,8 @@ def _slug(name: str) -> str:
 def game_url(game: Game, competition: str) -> str | None:
     """Official game-center page, e.g. ``.../euroleague/game-center/2026-27/<home>-<away>/E2026/31/``.
 
-    Slugs are the clubs' full names lowercased and hyphenated. Only the EuroLeague pattern is
-    confirmed; other competitions return ``None``.
+    Slugs are the clubs' full names lowercased and hyphenated. EuroCup uses the same pattern under
+    ``/eurocup/``; other competitions return ``None``.
     """
     path = COMPETITION_PATHS.get(competition)
     year = re.search(r"\d{4}", game.season)
@@ -262,13 +262,13 @@ def final_score(game: Game, box: BoxScore) -> str:
     return f"🏁 <b>Final</b>{ot_suffix(len(box.quarter_scores))} · {score}"
 
 
-def daily_schedule(games: list[Game], results_time: time | None = None) -> str:
+def daily_schedule(games: list[Game], name: str, results_time: time | None = None) -> str:
     """Header of the daily schedule. The games themselves are its Follow buttons."""
     rounds = sorted({g.round for g in games if g.round is not None})
     round_text = f" · Round {rounds[0]}" if len(rounds) == 1 else ""
     results = f" All results arrive at {results_time:%H:%M}." if results_time else ""
     return (
-        f"📅 <b>Today's EuroLeague games</b>{round_text}\n\n"
+        f"📅 <b>Today's {escape(name)} games</b>{round_text}\n\n"
         "Tap a game to follow it: a reminder before tip-off and a score card after every quarter, "
         f"with 📊 for the full stats.{results}"
     )
@@ -279,14 +279,14 @@ def schedule_label(game: Game, following: bool) -> str:
     return f"{star} {{{{hm:{iso_z(game.tipoff)}}}}} {game.home.short_name} {DASH} {game.away.short_name}"
 
 
-def daily_results(games: list[Game], day: date, missing: int = 0) -> str:
+def daily_results(games: list[Game], day: date, name: str, command: str, missing: int = 0) -> str:
     """Header of the nightly results for the games of ``day``. The games are its 📊 buttons."""
     rounds = sorted({g.round for g in games if g.round is not None})
     round_text = f" · Round {rounds[0]}" if len(rounds) == 1 else ""
-    head = f"🏁 <b>EuroLeague results</b> · {day:%a} {day.day} {day:%b}{round_text}"
+    head = f"🏁 <b>{escape(name)} results</b> · {day:%a} {day.day} {day:%b}{round_text}"
     text = f"{head}\n\nTap a game for its box score."
     if missing:
-        text += f"\n\n⚠️ {missing} result{'s' if missing > 1 else ''} not available yet: see /score."
+        text += f"\n\n⚠️ {missing} result{'s' if missing > 1 else ''} not available yet: see /{command}."
     return text
 
 

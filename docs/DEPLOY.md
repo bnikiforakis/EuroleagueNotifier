@@ -42,6 +42,16 @@ nothing changed, nothing restarts. Data lives in Docker volumes, so it survives 
 - **Never start the Mac's containers while the Pi is running.** One bot token allows only one
   running PiButler.
 
+## Services on the Pi
+
+| Container | What it is | In /settings | Command | Schedule / results |
+|---|---|---|---|---|
+| `pibutler` | the Telegram bot | | | |
+| `euroleague-notifier` | EuroLeague | EuroLeague | `/score` | 12:00 / 01:00 |
+| `eurocup-notifier` | EuroCup (same code) | EuroCup | `/eurocup` | 12:30 / 01:30 |
+
+`scripts/deploy.sh notifier` updates both EuroLeague and EuroCup (they share the code).
+
 ## Rolling back
 
 If an update misbehaves, go back to the previous commit on the Pi:

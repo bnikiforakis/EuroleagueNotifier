@@ -24,7 +24,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from aiohttp import web
 
 from euroleague_notifier import reports
-from euroleague_notifier.api import ApiError
+from euroleague_notifier.api import ApiError, EuroleagueClient
+from euroleague_notifier.config import Settings
 from euroleague_notifier.models import REGULATION_PERIODS, BoxScore, Game, LiveHeader, period_label
 from euroleague_notifier.tracker import MAX_GAME_LENGTH, Notifier
 
@@ -152,9 +153,16 @@ class Scoreboard:
 
     def __init__(self, notifier: Notifier, cache_ttl: float = CACHE_TTL, timeout: float = FETCH_TIMEOUT):
         self.notifier = notifier
-        self.settings = notifier.settings
-        self.el = notifier.el
         self.cache = TtlCache(cache_ttl, timeout)
+
+    # Read through the notifier, so the scoreboard always uses its current settings and client.
+    @property
+    def settings(self) -> Settings:
+        return self.notifier.settings
+
+    @property
+    def el(self) -> EuroleagueClient:
+        return self.notifier.el
 
     # --- entry point -------------------------------------------------------------------------
 
@@ -163,14 +171,14 @@ class Scoreboard:
         tz = _zone(user.get("timezone") if isinstance(user, dict) else None, self.settings.digest_timezone)
         kind = body.get("type")
         try:
-            if kind == "command" and body.get("command") == "score":
+            if kind == "command" and body.get("command") == self.settings.score_command:
                 return await self.list_view(tz)
             if kind == "action":
                 return await self.action(str(body.get("data") or ""), tz)
         except Exception:
             log.exception("score view failed")
             return Reply(UNAVAILABLE, [[BACK]])
-        return Reply("🤷 Unknown command. Try /score for today's games.")
+        return Reply(f"🤷 Unknown command. Try /{self.settings.score_command} for today's games.")
 
     async def action(self, data: str, tz: ZoneInfo) -> Reply:
         view, _, ref = data.partition("|")
@@ -180,7 +188,7 @@ class Scoreboard:
             return await (self.game_view if view == "g" else self.stats_view)(*found)
         if view in ("g", "s"):
             return Reply("That game isn't on the schedule any more.", [[BACK]])
-        return Reply("🤷 That button has expired. Try /score again.")
+        return Reply(f"🤷 That button has expired. Try /{self.settings.score_command} again.")
 
     # --- views -------------------------------------------------------------------------------
 
@@ -205,13 +213,18 @@ class Scoreboard:
             key=lambda row: (row[1].tipoff, row[1].code),
         )
         if not shown:
-            text = "🏀 <b>Today's EuroLeague games</b>\n\nNo EuroLeague games today."
+            name = escape(self.settings.project_name)
+            text = f"🏀 <b>Today's {name} games</b>\n\nNo {name} games today."
             upcoming = [g for _, g in games if g.tipoff > now]
             if upcoming:
                 nxt = min(upcoming, key=lambda g: (g.tipoff, g.code))
                 text += f"\nNext: {{{{time:{reports.iso_z(nxt.tipoff)}}}}} {_matchup(nxt)}"
             return Reply(text)
-        lines = ["🏀 <b>Today's EuroLeague games</b>", "", "Tap a game for the live score."]
+        lines = [
+            f"🏀 <b>Today's {escape(self.settings.project_name)} games</b>",
+            "",
+            "Tap a game for the live score.",
+        ]
         if any(s.state == "unknown" for _, _, s in shown):
             lines += ["", UNAVAILABLE]
         if len(shown) > MAX_GAMES:

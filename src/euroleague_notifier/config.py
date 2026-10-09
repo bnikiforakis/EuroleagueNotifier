@@ -1,6 +1,7 @@
 """Settings loaded from environment variables (see .env.example)."""
 
 import os
+import re
 from dataclasses import dataclass
 from datetime import time
 from urllib.parse import urlsplit
@@ -12,6 +13,8 @@ class Settings:
     pibutler_url: str
     pibutler_api_key: str
     project_id: str = "euroleague-notifier"
+    project_name: str = "EuroLeague"  # shown in /settings and in the messages
+    score_command: str = "score"  # live-scores command; each PiButler project needs its own
     competitions: tuple[str, ...] = ("E",)
     season_year: int = 2026
     reminder_minutes: int = 30
@@ -41,6 +44,8 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         pibutler_url=env["PIBUTLER_URL"].rstrip("/"),
         pibutler_api_key=env["PIBUTLER_API_KEY"],
         project_id=env.get("PIBUTLER_PROJECT_ID", "euroleague-notifier"),
+        project_name=env.get("PROJECT_NAME", "EuroLeague"),
+        score_command=env.get("SCORE_COMMAND", "score").strip().removeprefix("/"),
         competitions=tuple(c.strip().upper() for c in env.get("COMPETITIONS", "E").split(",") if c.strip()),
         season_year=int(env.get("SEASON_YEAR", "2026")),
         reminder_minutes=int(env.get("REMINDER_MINUTES", "30")),
@@ -53,4 +58,10 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         callback_url=env.get("CALLBACK_URL", "http://euroleague-notifier:8081/pibutler"),
     )
     ZoneInfo(settings.digest_timezone)  # fail fast on a typo
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,31}", settings.score_command):
+        raise SystemExit(
+            f"SCORE_COMMAND must be a lowercase Telegram command, got {settings.score_command!r}"
+        )
+    if not 0 < len(settings.project_name) <= 40:
+        raise SystemExit("PROJECT_NAME must be 1-40 characters")
     return settings

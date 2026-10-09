@@ -50,20 +50,17 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-COMMANDS = [{"command": "score", "description": "Live scores of today's games"}]
-
-
 def results_day(due: datetime) -> date:
     """The game day a results summary sent at ``due`` covers: the evening before if it's sent
     in the early hours (before noon), else that same day."""
     return due.date() - timedelta(days=1) if due.hour < 12 else due.date()
 
 
-def build_manifest(clubs: list[Club], callback_url: str | None = None) -> dict:
-    """Project manifest; with a ``callback_url`` PiButler also routes the ``COMMANDS`` to it."""
+def build_manifest(clubs: list[Club], name: str, command: str, callback_url: str | None = None) -> dict:
+    """Project manifest; with a ``callback_url`` PiButler also routes the live-scores command to it."""
     unique = sorted({c.code: c for c in clubs}.values(), key=lambda c: c.short_name)
     manifest = {
-        "name": "EuroLeague",
+        "name": name,
         "settings": [
             {
                 "key": "teams",
@@ -82,7 +79,8 @@ def build_manifest(clubs: list[Club], callback_url: str | None = None) -> dict:
         ],
     }
     if callback_url:
-        manifest |= {"commands": COMMANDS, "callback_url": callback_url}
+        commands = [{"command": command, "description": f"Live scores of today's {name} games"}]
+        manifest |= {"commands": commands, "callback_url": callback_url}
     return manifest
 
 
@@ -176,7 +174,10 @@ class Notifier:
                     for comp in self.settings.competitions
                     for c in await self.el.clubs(comp, self.settings.season(comp))
                 ]
-                await self.butler.register(build_manifest(clubs, self.settings.callback_url))
+                s = self.settings
+                await self.butler.register(
+                    build_manifest(clubs, s.project_name, s.score_command, s.callback_url)
+                )
                 log.info("registered manifest with %d teams", len({c.code for c in clubs}))
                 return
             except (ApiError, ButlerError) as exc:
@@ -277,7 +278,7 @@ class Notifier:
         ]
         await self._send(
             key,
-            reports.daily_schedule(upcoming, self.settings.results_time),
+            reports.daily_schedule(upcoming, self.settings.project_name, self.settings.results_time),
             tags={"daily": ["schedule"]},
             topics=[topic(g) for g in upcoming],
             silent=True,
@@ -327,7 +328,13 @@ class Notifier:
         ]
         await self._send(
             key,
-            reports.daily_results([g for g, _ in finished], day, missing=len(pending)),
+            reports.daily_results(
+                [g for g, _ in finished],
+                day,
+                self.settings.project_name,
+                self.settings.score_command,
+                missing=len(pending),
+            ),
             tags={"daily": ["results"]},
             buttons=buttons,
             silent=True,
