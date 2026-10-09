@@ -26,11 +26,11 @@ for repo in "${REPOS[@]}"; do
   # shellcheck disable=SC2029  # $repo is meant to expand locally
   ssh "$HOST" "set -eo pipefail
     cd ~/apps/$repo
-    docker compose config --quiet  # fails fast on a missing .env value, before touching anything
     before=\$(git rev-parse --short HEAD)
     git pull --ff-only -q
     after=\$(git rev-parse --short HEAD)
     echo \"   code: \$before -> \$after\"
+    docker compose config --quiet  # the new compose file + .env must be valid before anything restarts
     docker compose up -d --build --quiet-pull
     for service in \$(docker compose config --services); do
       for _ in \$(seq 1 30); do
