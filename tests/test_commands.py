@@ -3,7 +3,7 @@
 import asyncio
 import json
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -275,6 +275,48 @@ async def test_finished_game_view(make):
         f"Q1 21{DASH}14 · Q2 22{DASH}32 · Q3 34{DASH}28 · Q4 19{DASH}24"
     )
     assert actions(reply) == [["s|37", "g|37"], ["l"]]
+
+
+def targets(reply: dict) -> list[list[str]]:
+    return [[b.get("action") or b["url"] for b in row] for row in reply["buttons"]]
+
+
+async def test_finished_game_waiting_for_highlights(make):
+    s = await make()
+    await s.events.add(f"{BY_CODE[37].identifier}:final", NOW - timedelta(minutes=30))
+    reply = await s.action("g|37")
+    assert reply["text"].endswith(
+        "⏳ Highlights not up yet: they usually arrive about an hour after the game."
+    )
+    assert actions(reply) == [["s|37", "g|37"], ["l"]]
+    s.now = NOW + timedelta(hours=12)  # given up: no promise any more
+    assert "Highlights" not in (await s.action("g|37"))["text"]
+
+
+async def test_finished_game_with_highlights(make):
+    s = await make()
+    await s.events.add(f"{BY_CODE[37].identifier}:final", NOW - timedelta(hours=2))
+    await s.events.add_highlight(BY_CODE[37].identifier, "2kMCaWkCCK8")
+    reply = await s.action("g|37")
+    assert "not up yet" not in reply["text"]
+    assert targets(reply) == [["s|37", "https://www.youtube.com/watch?v=2kMCaWkCCK8"], ["g|37"], ["l"]]
+    assert labels(reply)[1] == "▶️ Highlights"
+
+
+async def test_game_card_from_the_results_stays_on_that_game(make):
+    s = await make()
+    await s.events.add_highlight(BY_CODE[37].identifier, "2kMCaWkCCK8")
+    reply = await s.action("r|37")
+    assert reply["text"].startswith("✅ <b>Final</b>")
+    assert targets(reply) == [["t|37", "https://www.youtube.com/watch?v=2kMCaWkCCK8"], ["r|37"]]  # no Back
+    assert actions(await s.action("t|37")) == [["t|37", "r|37"]]  # its stats lead back to this card
+
+
+async def test_no_highlights_for_competitions_without_a_channel(make, monkeypatch):
+    s = await make()
+    monkeypatch.setattr("euroleague_notifier.highlights.CHANNELS", {})
+    await s.events.add_highlight(BY_CODE[37].identifier, "2kMCaWkCCK8")
+    assert actions(await s.action("g|37")) == [["s|37", "g|37"], ["l"]]
 
 
 async def test_upcoming_game_view_has_no_stats(make):

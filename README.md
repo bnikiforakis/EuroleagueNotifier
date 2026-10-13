@@ -1,7 +1,8 @@
 # EuroleagueNotifier
 
 EuroLeague notifications in Telegram: upcoming games, quarter reports, and full-game reports
-with stats, for the teams you follow.
+with stats, for the teams you follow. About an hour after each game, the official YouTube
+highlights are linked too.
 
 It runs 24/7 on a Raspberry Pi and delivers messages through
 [PiButler](https://github.com/bnikiforakis/PiButler), an invite-only Telegram bot gateway.

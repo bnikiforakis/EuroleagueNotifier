@@ -5,7 +5,8 @@ PiButler POSTs ``{"type": "command" | "action", ...}`` with the project's API ke
 live Header/Boxscore feeds. Those lookups go through a short TTL cache: PiButler gives up after 8 s,
 and many users (or one impatient one) must not multiply the requests to the EuroLeague API.
 
-Action data stays within ``ACTION_RE``: ``l`` (list), ``g|<ref>`` (game), ``s|<ref>`` (stats), where
+Action data stays within ``ACTION_RE``: ``l`` (list), ``g|<ref>`` (game), ``s|<ref>`` (stats),
+``r|<ref>``/``t|<ref>`` (game/stats opened from the nightly results: no way back to today's list), where
 ``<ref>`` is the game code, prefixed by the competition when following several (``g|E|36``).
 """
 
@@ -23,11 +24,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from aiohttp import web
 
-from euroleague_notifier import reports
+from euroleague_notifier import highlights, reports
 from euroleague_notifier.api import ApiError, EuroleagueClient
 from euroleague_notifier.config import Settings
 from euroleague_notifier.models import REGULATION_PERIODS, BoxScore, Game, LiveHeader, period_label
-from euroleague_notifier.tracker import MAX_GAME_LENGTH, Notifier
+from euroleague_notifier.tracker import HIGHLIGHTS_GIVE_UP, MAX_GAME_LENGTH, Notifier, game_ref
 
 log = logging.getLogger(__name__)
 
@@ -184,9 +185,11 @@ class Scoreboard:
         view, _, ref = data.partition("|")
         if data == "l":
             return await self.list_view(tz)
-        if view in ("g", "s") and (found := self._find(ref)):
-            return await (self.game_view if view == "g" else self.stats_view)(*found)
-        if view in ("g", "s"):
+        if view in ("g", "r", "s", "t") and (found := self._find(ref)):
+            if view in ("s", "t"):
+                return await self.stats_view(*found, from_results=view == "t")
+            return await self.game_view(*found, from_results=view == "r")
+        if view in ("g", "r", "s", "t"):
             return Reply("That game isn't on the schedule any more.", [[BACK]])
         return Reply(f"🤷 That button has expired. Try /{self.settings.score_command} again.")
 
@@ -233,18 +236,19 @@ class Scoreboard:
         buttons = [[{"label": self._label(g, s), "action": f"g|{self._ref(c, g)}"}] for c, g, s in shown]
         return Reply("\n".join(lines), buttons)
 
-    async def game_view(self, competition: str, game: Game) -> Reply:
+    async def game_view(self, competition: str, game: Game, from_results: bool = False) -> Reply:
         ref = self._ref(competition, game)
         status, box = await self._status_and_box(game)
-        refresh = {"label": "🔄 Refresh", "action": f"g|{ref}"}
-        stats = {"label": "📊 Stats", "action": f"s|{ref}"}
+        back = [] if from_results else [[BACK]]
+        refresh = {"label": "🔄 Refresh", "action": f"{'r' if from_results else 'g'}|{ref}"}
+        stats = {"label": "📊 Stats", "action": f"{'t' if from_results else 's'}|{ref}"}
         if status.state == "upcoming":
             lines = [f"⏳ {_matchup(game)}", f"Tip-off {{{{time:{reports.iso_z(game.tipoff)}}}}}"]
             if game.venue:
                 lines.append(f"📍 {escape(game.venue.title())}")
-            return Reply("\n".join(lines), [[refresh], [BACK]])
+            return Reply("\n".join(lines), [[refresh], *back])
         if status.state == "unknown":
-            return Reply(f"🏀 {_matchup(game)}\n\n{UNAVAILABLE}", [[refresh], [BACK]])
+            return Reply(f"🏀 {_matchup(game)}\n\n{UNAVAILABLE}", [[refresh], *back])
         header, (home, away) = status.header, status.score or (0, 0)
         # The box score has each overtime separately; the Header lumps them together.
         periods = _started(box.quarter_scores, header) if box else (header.quarter_scores if header else [])
@@ -255,11 +259,23 @@ class Scoreboard:
             lines = [f"✅ <b>Final</b>{reports.ot_suffix(len(periods))} · {score}"]
         if periods:
             lines += ["", _periods_line(periods, exact=box is not None)]
-        return Reply("\n".join(lines), [[stats, refresh], [BACK]])
+        if status.state == "final" and competition in highlights.CHANNELS:
+            if found := await self.notifier.events.highlight(game.identifier):
+                watch = {"label": "▶️ Highlights", "url": highlights.video_url(found[0])}
+                return Reply("\n".join(lines), [[stats, watch], [refresh], *back])
+            if await self._highlights_expected(game):
+                lines += ["", "⏳ Highlights not up yet: they usually arrive about an hour after the game."]
+        return Reply("\n".join(lines), [[stats, refresh], *back])
 
-    async def stats_view(self, competition: str, game: Game) -> Reply:
+    async def stats_view(self, competition: str, game: Game, from_results: bool = False) -> Reply:
         ref = self._ref(competition, game)
-        buttons = [[{"label": "🔄 Refresh", "action": f"s|{ref}"}, {"label": "⬅️ Game", "action": f"g|{ref}"}]]
+        stats, card = ("t", "r") if from_results else ("s", "g")
+        buttons = [
+            [
+                {"label": "🔄 Refresh", "action": f"{stats}|{ref}"},
+                {"label": "⬅️ Game", "action": f"{card}|{ref}"},
+            ]
+        ]
         status, box = await self._status_and_box(game)
         if status.state in ("live", "final") and box is None:
             return Reply(f"📊 {_matchup(game)}\n\n{UNAVAILABLE}", buttons)
@@ -282,7 +298,12 @@ class Scoreboard:
     # --- helpers -----------------------------------------------------------------------------
 
     def _ref(self, competition: str, game: Game) -> str:
-        return str(game.code) if len(self.settings.competitions) == 1 else f"{competition}|{game.code}"
+        return game_ref(self.settings.competitions, competition, game)
+
+    async def _highlights_expected(self, game: Game) -> bool:
+        """Still being looked for: the tracker saw the game end less than the give-up time ago."""
+        ended = await self.notifier.game_ended(game)
+        return ended is not None and self.notifier.now() < ended + HIGHLIGHTS_GIVE_UP
 
     def _find(self, ref: str) -> tuple[str, Game] | None:
         competition, _, code = ref.rpartition("|")

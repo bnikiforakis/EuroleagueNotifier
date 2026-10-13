@@ -4,6 +4,7 @@ Sources:
 - Schedule and clubs: ``api-live.euroleague.net/v2`` (schedule is cached ``max-age=7200``, so its
   ``played``/score fields can lag by up to two hours; use the live feeds for in-game state).
 - Header, PlayByPlay and Boxscore: ``live.euroleague.net/api`` (``max-age=60``).
+- Highlights: the official YouTube channels' Atom feeds (see ``highlights``).
 
 The box score comes from ``live.euroleague.net/api/Boxscore`` rather than the v3 ``/stats`` endpoint:
 both are cached for 60s, but the live feed also carries per-period scores (``ByQuarter``, including
@@ -17,12 +18,14 @@ Live feeds answer ``200`` with an empty body before tip-off; ``header`` and ``bo
 import asyncio
 import json
 import re
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
 
 import httpx
 
+from euroleague_notifier.highlights import FEED_URL, Video, parse_feed
 from euroleague_notifier.models import (
     REGULATION_PERIODS,
     BoxScore,
@@ -268,14 +271,16 @@ class EuroleagueClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def _get(self, url: str, params: dict[str, Any] | None = None) -> Any:
-        """GET and decode JSON (``None`` for an empty body), retrying network errors and 5xx."""
+    async def _fetch(
+        self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None
+    ) -> httpx.Response:
+        """GET, retrying network errors and 5xx."""
         last: Exception | None = None
         for attempt in range(ATTEMPTS):
             if attempt:
                 await asyncio.sleep(self._backoff * 2 ** (attempt - 1))
             try:
-                response = await self._http.get(url, params=params)
+                response = await self._http.get(url, params=params, headers=headers)
             except httpx.TransportError as exc:
                 last = exc
                 continue
@@ -284,13 +289,18 @@ class EuroleagueClient:
                 continue
             if response.status_code >= 400:
                 raise ApiError(f"{response.status_code} from {response.url}")
-            if not response.content.strip():
-                return None
-            try:
-                return response.json()
-            except json.JSONDecodeError as exc:
-                raise ApiError(f"invalid JSON from {response.url}") from exc
+            return response
         raise ApiError(f"GET {url} failed after {ATTEMPTS} attempts: {last}") from last
+
+    async def _get(self, url: str, params: dict[str, Any] | None = None) -> Any:
+        """GET and decode JSON (``None`` for an empty body)."""
+        response = await self._fetch(url, params)
+        if not response.content.strip():
+            return None
+        try:
+            return response.json()
+        except json.JSONDecodeError as exc:
+            raise ApiError(f"invalid JSON from {response.url}") from exc
 
     async def _live(self, feed: str, season: str, code: int) -> Any:
         return await self._get(f"{LIVE_BASE}/{feed}", {"gamecode": code, "seasoncode": season})
@@ -317,3 +327,13 @@ class EuroleagueClient:
 
     async def boxscore(self, season: str, code: int) -> BoxScore | None:
         return parse_boxscore(await self._live("Boxscore", season, code))
+
+    async def videos(self, channel_id: str) -> list[Video]:
+        """The latest uploads of a YouTube channel (ADR-018)."""
+        response = await self._fetch(
+            FEED_URL, {"channel_id": channel_id}, {"Accept": "application/atom+xml, application/xml"}
+        )
+        try:
+            return parse_feed(response.content)
+        except ET.ParseError as exc:
+            raise ApiError(f"invalid feed from {response.url}") from exc

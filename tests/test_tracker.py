@@ -470,7 +470,7 @@ async def test_waiting_tracker_notices_host_sleep_within_a_minute(events):
 AFTER_ONE_AM = datetime(2026, 10, 8, 22, 30, tzinfo=UTC)  # 01:30 Athens on Oct 9: results for Oct 8
 
 
-async def test_nightly_results_after_one_am_with_a_stats_button_per_game(events):
+async def test_nightly_results_after_one_am_with_a_game_card_button_per_game(events):
     other = replace(GAME, code=98, tipoff=TIPOFF + timedelta(hours=2))
     notifier, butler, _ = make(events, [PRE], start=AFTER_ONE_AM, games=[other, GAME])
     await notifier.refresh_schedule()
@@ -482,7 +482,19 @@ async def test_nightly_results_after_one_am_with_a_stats_button_per_game(events)
     assert "EuroLeague results</b> · Thu 8 Oct" in msg["text"]  # the games' day, not "today"
     (first,), (second,) = msg["buttons"]
     assert first["label"].startswith(f"✅ {GAME.home.short_name} ")  # in tip-off order
-    assert "Team stats" in first["reveal"] and "Team stats" in second["reveal"]
+    # opens the live game card (score, stats, highlights once found) through the callback
+    assert (first["action"], second["action"]) == ("r|99", "r|98")
+    assert "score, stats and highlights" in msg["text"]
+
+
+async def test_nightly_results_without_commands_reveal_the_box_score(events):
+    notifier, butler, _ = make(events, [PRE], start=AFTER_ONE_AM)
+    notifier.settings = replace(notifier.settings, callback_url="")
+    await notifier.refresh_schedule()
+    await notifier.maybe_send_results()
+    ((button,),) = butler.sent[0]["buttons"]
+    assert "Team stats" in button["reveal"] and "action" not in button
+    assert "highlights" not in butler.sent[0]["text"]
 
 
 async def test_no_results_before_one_am(events):

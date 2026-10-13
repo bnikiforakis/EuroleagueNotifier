@@ -279,15 +279,22 @@ def schedule_label(game: Game, following: bool) -> str:
     return f"{star} {{{{hm:{iso_z(game.tipoff)}}}}} {game.home.short_name} {DASH} {game.away.short_name}"
 
 
-def daily_results(games: list[Game], day: date, name: str, command: str, missing: int = 0) -> str:
-    """Header of the nightly results for the games of ``day``. The games are its 📊 buttons."""
+def daily_results(
+    games: list[Game], day: date, name: str, command: str, missing: int = 0, with_highlights: bool = False
+) -> str:
+    """Header of the nightly results for the games of ``day``. The games are its buttons."""
     rounds = sorted({g.round for g in games if g.round is not None})
     round_text = f" · Round {rounds[0]}" if len(rounds) == 1 else ""
     head = f"🏁 <b>{escape(name)} results</b> · {day:%a} {day.day} {day:%b}{round_text}"
-    text = f"{head}\n\nTap a game for its box score."
+    detail = "score, stats and highlights" if with_highlights else "box score"
+    text = f"{head}\n\nTap a game for its {detail}."
     if missing:
         text += f"\n\n⚠️ {missing} result{'s' if missing > 1 else ''} not available yet: see /{command}."
     return text
+
+
+def highlights(game: Game) -> str:
+    return f"▶️ <b>Highlights</b> · {matchup(game)}"
 
 
 def result_label(game: Game, box: BoxScore) -> str:

@@ -17,7 +17,7 @@ from datetime import UTC, date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from euroleague_notifier import reports
+from euroleague_notifier import highlights, reports
 from euroleague_notifier.api import ApiError, EuroleagueClient
 from euroleague_notifier.butler import ButlerClient, ButlerError
 from euroleague_notifier.config import Settings
@@ -41,6 +41,11 @@ QUARTER_TTL = timedelta(minutes=30)  # undelivered quarter reports go stale (AC1
 REMINDER_RETRY = timedelta(minutes=1)
 MAX_NAP = timedelta(minutes=1)  # longest single sleep while waiting for a time
 CATCH_UP_LIMIT = timedelta(minutes=3)  # stop waiting for the box score to match the play-by-play
+HIGHLIGHTS_DELAY = timedelta(hours=1)  # first look for the video this long after the final (ADR-018)
+HIGHLIGHTS_RETRY = timedelta(minutes=15)
+HIGHLIGHTS_GIVE_UP = timedelta(hours=12)
+HIGHLIGHTS_TTL = timedelta(hours=6)  # an undelivered highlights message goes stale
+HUNT_INTERVAL = timedelta(minutes=1)
 
 Clock = Callable[[], datetime]
 Sleep = Callable[[float], Awaitable[None]]
@@ -116,6 +121,11 @@ def followers(game: Game) -> dict:
     return {"topic": game.identifier, "following": True}
 
 
+def game_ref(competitions: tuple[str, ...], competition: str, game: Game) -> str:
+    """How action data names a game: its code, prefixed by the competition when following several."""
+    return str(game.code) if len(competitions) == 1 else f"{competition}|{game.code}"
+
+
 class Notifier:
     def __init__(
         self,
@@ -138,15 +148,16 @@ class Notifier:
         self._tracked: dict[str, Game] = {}  # the version of each game its task was started with
         self._games: dict[str, tuple[str, Game]] = {}  # identifier -> (competition, game)
         self._schedule_at: datetime | None = None
-        self._lagging: dict[str, datetime] = {}
-        self._result_boxes: dict[
-            str, dict[str, BoxScore]
-        ] = {}  # results key -> finished box scores  # message key -> when its box score was first behind
+        self._lagging: dict[str, datetime] = {}  # message key -> when its box score was first behind
+        self._result_boxes: dict[str, dict[str, BoxScore]] = {}  # results key -> finished box scores
+        self._hunt_next: dict[str, datetime] = {}  # game -> when to look for its highlights again
+        self._hunt_done: set[str] = set()  # games found (and announced) or given up on
 
     # --- main loop ---------------------------------------------------------------------------
 
     async def run(self) -> None:
         await self.register()
+        self._tasks["highlights"] = asyncio.create_task(self.hunt_highlights(), name="highlights")
         while True:
             try:
                 await self.tick()
@@ -322,8 +333,18 @@ class Notifier:
         if not boxes:
             return
         finished = [(g, boxes[g.identifier]) for _, g in played if g.identifier in boxes]
+        comps = self.settings.competitions
+        by_id = {g.identifier: c for c, g in played}
+        live_view = bool(self.settings.callback_url)  # a game card with highlights needs the callback
         buttons = [
-            [{"label": reports.result_label(g, box), "reveal": reports.final_report(g, box)}]
+            [
+                {
+                    "label": reports.result_label(g, box),
+                    "action": f"r|{game_ref(comps, by_id[g.identifier], g)}",
+                }
+                if live_view
+                else {"label": reports.result_label(g, box), "reveal": reports.final_report(g, box)}
+            ]
             for g, box in finished
         ]
         await self._send(
@@ -334,12 +355,94 @@ class Notifier:
                 self.settings.project_name,
                 self.settings.score_command,
                 missing=len(pending),
+                with_highlights=live_view,
             ),
             tags={"daily": ["results"]},
             buttons=buttons,
             silent=True,
         )
         self._result_boxes.pop(key, None)
+
+    # --- highlights (ADR-018) -----------------------------------------------------------------
+
+    async def hunt_highlights(self) -> None:
+        """Look for each finished game's highlights video from ``HIGHLIGHTS_DELAY`` after its final,
+        every ``HIGHLIGHTS_RETRY``, until found or ``HIGHLIGHTS_GIVE_UP``. One feed request per
+        competition covers every game still waiting."""
+        if not any(c in highlights.CHANNELS for c in self.settings.competitions):
+            return
+        while True:
+            try:
+                await self.hunt_once()
+            except Exception:
+                log.exception("highlights hunt failed")
+            await self.sleep(HUNT_INTERVAL.total_seconds())
+
+    async def game_ended(self, game: Game) -> datetime | None:
+        """When the tracker saw the final; for a final it missed (e.g. down during the game), a
+        conservative guess once the schedule says the game was played."""
+        ended = await self.events.sent_at(f"{game.identifier}:final")
+        return ended or (game.tipoff + MAX_GAME_LENGTH if game.played else None)
+
+    async def hunt_once(self) -> None:
+        now = self.now()
+        oldest = now - HIGHLIGHTS_GIVE_UP - MAX_GAME_LENGTH
+        recent = {
+            gid: (comp, game)
+            for gid, (comp, game) in self._games.items()
+            if comp in highlights.CHANNELS and oldest < game.tipoff < now
+        }
+        self._hunt_done &= recent.keys()  # forget games out of the window
+        self._hunt_next = {gid: t for gid, t in self._hunt_next.items() if gid in recent}
+        due: dict[str, list[Game]] = {}
+        for gid, (comp, game) in recent.items():
+            if gid in self._hunt_done:
+                continue
+            ended = await self.game_ended(game)
+            if ended is None or now < ended + HIGHLIGHTS_DELAY:
+                continue
+            if found := await self.events.highlight(gid):
+                await self._announce_highlights(game, *found)  # found earlier; announcing failed
+            elif now >= ended + HIGHLIGHTS_GIVE_UP:
+                log.warning("%s: no highlights video after %s, giving up", gid, HIGHLIGHTS_GIVE_UP)
+                self._hunt_done.add(gid)
+            elif now >= self._hunt_next.get(gid, now):
+                due.setdefault(comp, []).append(game)
+        for comp, games in due.items():
+            for game in games:
+                self._hunt_next[game.identifier] = now + HIGHLIGHTS_RETRY
+            try:
+                videos = await self.el.videos(highlights.CHANNELS[comp])
+            except ApiError as exc:
+                log.warning("highlights feed for %s failed: %s", comp, exc)
+                continue
+            clubs = {c.code: c for co, g in self._games.values() if co == comp for c in (g.home, g.away)}
+            for game in games:
+                if video := highlights.match(game, videos, clubs.values()):
+                    log.info("%s: highlights found: %s (%s)", game.identifier, video.title, video.url)
+                    await self.events.add_highlight(game.identifier, video.id, now)
+                    await self._announce_highlights(game, video.id, now)
+                else:
+                    log.info("%s: no highlights yet", game.identifier)
+
+    async def _announce_highlights(self, game: Game, video_id: str, found_at: datetime) -> None:
+        """A silent message to the game's followers; everyone else sees it on the game card."""
+        key = f"{game.identifier}:highlights"
+        expires = found_at + HIGHLIGHTS_TTL
+        try:
+            if not await self.events.has(key) and self.now() < expires:
+                await self._send(
+                    key,
+                    reports.highlights(game),
+                    expires_at=reports.iso_z(expires),
+                    topics=[topic(game)],
+                    audience=followers(game),
+                    buttons=[[{"label": "▶️ Watch on YouTube", "url": highlights.video_url(video_id)}]],
+                    silent=True,
+                )
+            self._hunt_done.add(game.identifier)
+        except ButlerError as exc:
+            log.warning("%s: highlights message failed, retrying: %s", game.identifier, exc)
 
     # --- per-game tracking -------------------------------------------------------------------
 
@@ -461,7 +564,7 @@ class Notifier:
         self, key: str, text: str, tags: dict | None = None, expires_at: str | None = None, **extra
     ) -> None:
         await self.butler.notify(key, text, tags, expires_at, **extra)
-        await self.events.add(key)
+        await self.events.add(key, self.now())
 
     async def _sleep_until(self, when: datetime) -> None:
         # Short naps against the wall clock: asyncio timers don't advance while the host sleeps
