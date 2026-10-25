@@ -17,7 +17,7 @@ from datetime import UTC, date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from euroleague_notifier import highlights, reports
+from euroleague_notifier import highlights, reports, weekly
 from euroleague_notifier.api import ApiError, EuroleagueClient
 from euroleague_notifier.butler import ButlerClient, ButlerError
 from euroleague_notifier.config import Settings
@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 KINDS = [
     {"value": "schedule", "label": "Daily schedule"},
     {"value": "results", "label": "Nightly results"},
+    {"value": "weekly", "label": "Weekly team schedule"},
 ]
 RESULTS_WINDOW = timedelta(hours=11)  # after RESULTS_TIME; later than that the summary is stale
 RESULTS_PATIENCE = timedelta(hours=2)  # how long the summary waits for an unfinished or missing game
@@ -46,6 +47,7 @@ HIGHLIGHTS_RETRY = timedelta(minutes=15)
 HIGHLIGHTS_GIVE_UP = timedelta(hours=12)
 HIGHLIGHTS_TTL = timedelta(hours=6)  # an undelivered highlights message goes stale
 HUNT_INTERVAL = timedelta(minutes=1)
+WEEKLY_PATIENCE = timedelta(hours=2)  # after WEEKLY_TIME, send without a partner schedule that's down
 
 Clock = Callable[[], datetime]
 Sleep = Callable[[float], Awaitable[None]]
@@ -139,9 +141,14 @@ class Notifier:
         clock: Clock = _utcnow,
         sleep: Sleep = asyncio.sleep,
         on_tick: Callable[[], None] | None = None,
+        partner: EuroleagueClient | None = None,
+        partner_competitions: tuple[str, ...] = (),
     ):
         self.settings = settings
         self.el = euroleague
+        # Other competitions whose games join the weekly schedules of our linked clubs (ADR-025).
+        self.partner = partner
+        self.partner_competitions = partner_competitions
         self.butler = butler
         self.events = events
         self.now = clock
@@ -222,6 +229,10 @@ class Notifier:
             await self.maybe_send_results()
         except Exception:
             log.exception("nightly results failed")
+        try:
+            await self.maybe_send_weekly()
+        except Exception:
+            log.exception("weekly schedules failed")
         for gid, (comp, game) in self._games.items():
             running = gid in self._tasks and not self._tasks[gid].done()
             if running and self._tracked[gid].tipoff != game.tipoff and not await self._started(gid):
@@ -365,6 +376,59 @@ class Notifier:
             silent=True,
         )
         self._result_boxes.pop(key, None)
+
+    # --- weekly team schedules (ADR-025) -------------------------------------------------------
+
+    async def maybe_send_weekly(self) -> None:
+        """Mondays from WEEKLY_TIME: one silent message per team with its games of the week, to
+        the team's followers. Retried every tick until sent; stale after Monday."""
+        tz = ZoneInfo(self.settings.digest_timezone)
+        local_now = self.now().astimezone(tz)
+        if local_now.weekday() != 0 or local_now.time() < self.settings.weekly_time:
+            return
+        start, end = weekly.week_of(local_now.date(), tz)
+        monday = start.date().isoformat()
+        if not (self._games or self.partner) or await self.events.has(f"weekly:{monday}"):
+            return
+        partners: list[tuple[str, Game]] = []
+        clubs: list[Club] = []
+        if self.partner:
+            down = []
+            for comp in self.partner_competitions:
+                try:
+                    partners += [
+                        (comp, g) for g in await self.partner.games(comp, self.settings.season(comp))
+                    ]
+                except Exception as exc:
+                    down.append(comp)
+                    log.warning("weekly: %s schedule unavailable: %s", comp, exc)
+            due = datetime.combine(local_now.date(), self.settings.weekly_time, tz)
+            if down and local_now < due + WEEKLY_PATIENCE:
+                return  # retried next tick; after the patience, sent without those games
+            clubs = [
+                c
+                for comp in self.settings.competitions
+                for c in await self.el.clubs(comp, self.settings.season(comp))
+            ]
+        weeks = weekly.team_weeks(
+            self._games.values(), partners, clubs, self.settings.competitions, start, end
+        )
+        for code, (club, fixtures) in sorted(weeks.items(), key=lambda item: item[1][0].short_name):
+            key = f"weekly:{monday}:{code}"
+            if await self.events.has(key):
+                continue
+            week_topic = weekly.topic(club, start.date())
+            await self._send(
+                key,
+                weekly.message(club, fixtures),
+                tags={"daily": ["weekly"]},
+                expires_at=reports.iso_z(start + timedelta(days=1)),
+                topics=[week_topic],
+                audience={"topic": week_topic["id"], "following": True},
+                silent=True,
+            )
+        await self.events.add(f"weekly:{monday}", self.now())
+        log.info("weekly schedules sent for %d teams", len(weeks))
 
     # --- highlights (ADR-018) -----------------------------------------------------------------
 

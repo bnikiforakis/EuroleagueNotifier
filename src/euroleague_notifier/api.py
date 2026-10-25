@@ -82,6 +82,10 @@ def _club(raw: dict) -> Club:
     return Club(code=_str(raw.get("code")), name=name, short_name=_str(raw.get("abbreviatedName")) or name)
 
 
+def _linked(competition: str, club: Club) -> Club:
+    return replace(club, link=CLUB_LINKS.get(competition, {}).get(club.code))
+
+
 def parse_clubs(payload: Any) -> list[Club]:
     return [_club(raw) for raw in _data(payload)]
 
@@ -326,12 +330,14 @@ class EuroleagueClient:
         return payload
 
     async def games(self, competition: str, season: str) -> list[Game]:
-        return parse_games(await self._v2(f"competitions/{competition}/seasons/{season}/games"))
+        games = parse_games(await self._v2(f"competitions/{competition}/seasons/{season}/games"))
+        return [
+            replace(g, home=_linked(competition, g.home), away=_linked(competition, g.away)) for g in games
+        ]
 
     async def clubs(self, competition: str, season: str) -> list[Club]:
-        links = CLUB_LINKS.get(competition, {})
         clubs = parse_clubs(await self._v2(f"competitions/{competition}/seasons/{season}/clubs"))
-        return [replace(c, link=links.get(c.code)) for c in clubs]
+        return [_linked(competition, c) for c in clubs]
 
     async def header(self, season: str, code: int) -> LiveHeader | None:
         return parse_header(await self._live("Header", season, code))

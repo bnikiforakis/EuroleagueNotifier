@@ -406,12 +406,13 @@ class GblClient(EuroleagueClient):
     # --- schedule ------------------------------------------------------------------------------
 
     async def games(self, competition: str, season: str) -> list[Game]:
-        """The current round and its neighbours: enough for today, tomorrow and last night."""
+        """The current round, the one before and the next two: today, last night, and the whole
+        coming week even when it has a midweek round (weekly schedules, ADR-025)."""
         page = await self._text(RESULTS_URL)
         current, rounds = parse_rounds(page)
         games = {g.code: g for g in parse_round(page, self.season_year)}
         if current is not None:
-            for round_ in (r for r in (current - 1, current + 1) if r in rounds):
+            for round_ in (r for r in (current - 1, current + 1, current + 2) if r in rounds):
                 other = await self._text(RESULTS_URL, {"series": f"{round_:02d}"})
                 games |= {g.code: g for g in parse_round(other, self.season_year)}
         self._games = games

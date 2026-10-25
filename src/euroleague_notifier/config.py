@@ -22,6 +22,7 @@ class Settings:
     digest_time: time = time(12, 0)
     digest_timezone: str = "Europe/Athens"
     results_time: time = time(1, 0)  # nightly results, for the previous day's games
+    weekly_time: time = time(10, 0)  # Mondays: each followed team's games of the week (ADR-025)
     db_path: str = "/data/euroleague_notifier.db"
     log_level: str = "INFO"
     callback_url: str = "http://euroleague-notifier:8081/pibutler"  # empty: no commands (/score)
@@ -53,6 +54,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         digest_time=time.fromisoformat(env.get("DIGEST_TIME", "12:00")),
         digest_timezone=env.get("DIGEST_TIMEZONE", "Europe/Athens"),
         results_time=time.fromisoformat(env.get("RESULTS_TIME", "01:00")),
+        weekly_time=time.fromisoformat(env.get("WEEKLY_TIME", "10:00")),
         db_path=env.get("DB_PATH", "/data/euroleague_notifier.db"),
         log_level=env.get("LOG_LEVEL", "INFO"),
         callback_url=env.get("CALLBACK_URL", "http://euroleague-notifier:8081/pibutler"),

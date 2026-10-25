@@ -2,7 +2,8 @@
 
 Basketball notifications in Telegram for EuroLeague, EuroCup and the Greek Basket League (GBL):
 upcoming games, quarter reports, and full-game reports with stats, for the teams you follow. A
-while after each game, its YouTube highlights are linked too.
+while after each game, its YouTube highlights are linked too, and every Monday each team you
+follow gets its schedule for the week, across all three competitions.
 
 Each competition runs as its own service with its own `/settings` page and live-scores command
 (`/score`, `/eurocup`, `/gbl`). A club that plays in several of them (say Panathinaikos in the

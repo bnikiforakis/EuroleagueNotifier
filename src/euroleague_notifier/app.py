@@ -1,6 +1,7 @@
 """Entry point: wire config, storage and clients, then run the notifier and its command server."""
 
 import asyncio
+import contextlib
 import logging
 import os
 import signal
@@ -26,14 +27,25 @@ async def run() -> None:
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
     events = await EventStore.open(settings.db_path)
     # The GBL comes from other sources behind the same interface (ADR-023).
-    source = GblClient(settings.season_year) if settings.competitions == ("G",) else EuroleagueClient()
+    gbl = settings.competitions == ("G",)
+    source = GblClient(settings.season_year) if gbl else EuroleagueClient()
+    partner = EuroleagueClient() if gbl else None  # the GBL's linked clubs' European games (ADR-025)
     async with (
         source as euroleague,
+        partner or contextlib.nullcontext(),
         ButlerClient(settings.pibutler_url, settings.pibutler_api_key, settings.project_id) as butler,
     ):
         # Docker's healthcheck looks at this file's age (see Dockerfile).
         heartbeat = Path(os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat"))
-        notifier = Notifier(settings, euroleague, butler, events, on_tick=heartbeat.touch)
+        notifier = Notifier(
+            settings,
+            euroleague,
+            butler,
+            events,
+            on_tick=heartbeat.touch,
+            partner=partner,
+            partner_competitions=("E", "U") if gbl else (),
+        )
         runner: web.AppRunner | None = None
         try:
             if settings.callback_url:
