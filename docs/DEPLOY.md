@@ -49,8 +49,17 @@ nothing changed, nothing restarts. Data lives in Docker volumes, so it survives 
 | `pibutler` | the Telegram bot | | | |
 | `euroleague-notifier` | EuroLeague | EuroLeague | `/score` | 12:00 / 01:00 |
 | `eurocup-notifier` | EuroCup (same code) | EuroCup | `/eurocup` | 12:30 / 01:30 |
+| `gbl-notifier` | Greek Basket League (same code, GBL sources) | GBL | `/gbl` | 11:30 / 00:30 |
 
-`scripts/deploy.sh notifier` updates both EuroLeague and EuroCup (they share the code).
+`scripts/deploy.sh notifier` updates all three (they share the code).
+
+### First deploy of the GBL service
+
+1. Generate a key: `openssl rand -base64 32`.
+2. On the Pi, append `,gbl:<key>` to `PROJECT_KEYS` in `~/apps/PiButler/.env` and set
+   `GBL_PIBUTLER_API_KEY=<key>` in `~/apps/EuroleagueNotifier/.env`.
+3. Deploy PiButler, then the notifier (`scripts/deploy.sh`). Approve the new project when the
+   bot asks in Telegram.
 
 ## Rolling back
 

@@ -19,6 +19,7 @@ import asyncio
 import json
 import re
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
@@ -44,11 +45,22 @@ TIMEOUT = 15.0
 ATTEMPTS = 3
 BACKOFF = 1.0
 
+# Clubs that also play the GBL share its links, so auto-follow carries over (ADR-024).
+# Codes are per competition: EuroCup's PAO is PAOK, the GBL's is Panathinaikos.
+CLUB_LINKS = {
+    "E": {"OLY": "gr-olympiacos", "PAN": "gr-panathinaikos"},
+    "U": {"ARI": "gr-aris", "PAO": "gr-paok"},
+}
+
 PBP_SECTIONS = ("FirstQuarter", "SecondQuarter", "ThirdQuarter", "ForthQuarter", "ExtraTime")
 
 
 class ApiError(Exception):
     """Raised when an endpoint keeps failing or returns something unparseable."""
+
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status  # the HTTP status of a 4xx/5xx answer, if that was the failure
 
 
 def _data(payload: Any) -> list[dict]:
@@ -285,10 +297,10 @@ class EuroleagueClient:
                 last = exc
                 continue
             if response.status_code >= 500:
-                last = ApiError(f"{response.status_code} from {response.url}")
+                last = ApiError(f"{response.status_code} from {response.url}", response.status_code)
                 continue
             if response.status_code >= 400:
-                raise ApiError(f"{response.status_code} from {response.url}")
+                raise ApiError(f"{response.status_code} from {response.url}", response.status_code)
             return response
         raise ApiError(f"GET {url} failed after {ATTEMPTS} attempts: {last}") from last
 
@@ -317,7 +329,9 @@ class EuroleagueClient:
         return parse_games(await self._v2(f"competitions/{competition}/seasons/{season}/games"))
 
     async def clubs(self, competition: str, season: str) -> list[Club]:
-        return parse_clubs(await self._v2(f"competitions/{competition}/seasons/{season}/clubs"))
+        links = CLUB_LINKS.get(competition, {})
+        clubs = parse_clubs(await self._v2(f"competitions/{competition}/seasons/{season}/clubs"))
+        return [replace(c, link=links.get(c.code)) for c in clubs]
 
     async def header(self, season: str, code: int) -> LiveHeader | None:
         return parse_header(await self._live("Header", season, code))

@@ -90,7 +90,8 @@ Each service keeps a small SQLite file in a Docker volume. To copy consistent sn
 
 ```sh
 mkdir -p ~/backups
-for svc in pibutler:pibutler euroleague-notifier:euroleague_notifier; do
+for svc in pibutler:pibutler euroleague-notifier:euroleague_notifier eurocup-notifier:eurocup_notifier \
+    gbl-notifier:gbl_notifier; do
   name=${svc%%:*}; db=${svc##*:}
   docker exec "$name" python -c "import sqlite3; sqlite3.connect('/data/$db.db').backup(sqlite3.connect('/tmp/$db.db'))"
   docker exec "$name" sh -c "cat /tmp/$db.db && rm /tmp/$db.db" > ~/backups/"$db-$(date +%F).db"

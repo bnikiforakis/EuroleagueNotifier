@@ -6,12 +6,15 @@ final buzzer. The channel's Atom feed lists its latest 15 uploads and needs no A
 Titles differ per channel and use names that only roughly match the API's:
 - EuroLeague: ``Real Madrid - Partizan Mozzart Bet | R4 Highlights 2026-27``, sometimes after a
   headline: ``ALL-OUT IN THE FRENCH DERBY! | Paris Basketball - LDLC ASVEL | R4 Highlights 2026-27``;
-- EuroCup: ``Kids&Us Manresa - radiopharm ulm | Round 2 | BKT EuroCup Basketball 2026-27`` (sic).
+- EuroCup: ``Kids&Us Manresa - radiopharm ulm | Round 2 | BKT EuroCup Basketball 2026-27`` (sic);
+- GBL: the league's channel has no per-game videos, the broadcaster Sport FM TV does, in Greek and
+  with the final score: ``ΠΑΟΚ – ΑΕΚ 65-62 | HIGHLIGHTS | Stoiximan GBL`` (ADR-023).
 
 So a video matches a game when one ``|`` segment reads ``<home> - <away>``, each side naming its
 club more closely than any other club of the competition, the title says "Highlights" or names the
-game's round, and it was published after tip-off. That excludes previews ("Last 5 Meetings"),
-late-game clips ("LAST 5 MINUTES") and earlier meetings of the same teams.
+game's round, and it was published after tip-off; a final score after the teams must be the game's
+(until the schedule has it, such a video waits). That excludes previews ("Last 5 Meetings"),
+late-game clips ("LAST 5 MINUTES"), earlier meetings of the same teams and other sports.
 """
 
 import re
@@ -26,11 +29,13 @@ from euroleague_notifier.models import Club, Game
 CHANNELS = {
     "E": "UCGr3nR_XH9r6E5b09ZJAT9w",  # EUROLEAGUE BASKETBALL
     "U": "UCpFqOv5z4WKps64GlQS4ytw",  # EuroCup
+    "G": "UCPRkLPtgLZR1jYPxcBluZJQ",  # Sport FM TV (GBL broadcaster; also posts football)
 }
 FEED_URL = "https://www.youtube.com/feeds/videos.xml"
 _ATOM = "{http://www.w3.org/2005/Atom}"
 _YT = "{http://www.youtube.com/xml/schemas/2015}"
 _VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_SCORE = re.compile(r"\s+(\d+)\s*[-\u2013]\s*(\d+)\s*$")  # "78-64", "94 - 86"
 # Words too common in club names to tell two clubs apart.
 _GENERIC = {"basket", "basketball", "bc", "fc", "kk", "club", "the", "and", "de", "of", "sc", "bk", "cb"}
 
@@ -67,13 +72,22 @@ def parse_feed(xml: str | bytes) -> list[Video]:
     return videos
 
 
+def fold(text: str) -> str:
+    """Lowercase without accents, in any script: "Άρης" and "ΑΡΗΣ" compare equal."""
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
 def _words(text: str) -> set[str]:
-    plain = unicodedata.normalize("NFKD", text.replace("&", " and ")).encode("ascii", "ignore").decode()
-    return {w for w in re.findall(r"[a-z0-9]+", plain.casefold()) if w not in _GENERIC and len(w) > 1}
+    return {
+        w
+        for w in re.findall(r"[^\W_]+", fold(text.replace("&", " and ")))
+        if w not in _GENERIC and len(w) > 1
+    }
 
 
 def _names(club: Club) -> set[str]:
-    return _words(club.name) | _words(club.short_name)
+    return set().union(*(_words(n) for n in (club.name, club.short_name, *club.aliases)))
 
 
 def _similarity(side: set[str], club: Club) -> float:
@@ -102,7 +116,14 @@ def is_highlights(game: Game, video: Video, clubs: Iterable[Club] = ()) -> bool:
         return False
     others = list(clubs)
     for segment in video.title.split("|"):
-        sides = re.split(r"\s+[-\u2013]\s+", segment.strip())  # hyphen or en dash
+        segment = segment.strip()
+        # A title with a score (GBL) must have this game's: the same channel posts football
+        # highlights between clubs of the same names ("ΠΑΟΚ – ΑΕΚ 2-1").
+        if (score := _SCORE.search(segment)) and (
+            (int(score[1]), int(score[2])) != (game.home_score, game.away_score)
+        ):
+            continue
+        sides = re.split(r"\s+[-\u2013]\s+", _SCORE.sub("", segment))  # hyphen or en dash
         if (
             len(sides) == 2
             and _names_club(sides[0], game.home, others)

@@ -218,3 +218,12 @@ async def test_client_empty_schedule_is_an_error(feed):
 def test_period_state_before_first_begin_period_is_not_started():
     pbp = {"ActualQuarter": 1, **{section: [] for section in PBP_SECTIONS}}
     assert parse_period_state(pbp).current_period == 0
+
+
+async def test_client_clubs_carry_links():
+    body = (FIXTURES / "v2_clubs_E2026.json").read_bytes()
+    transport, _ = _transport([httpx.Response(200, content=body)])
+    async with EuroleagueClient(transport=transport) as client:
+        clubs = {c.code: c for c in await client.clubs("E", "E2026")}
+    assert clubs["PAN"].link == "gr-panathinaikos" and clubs["OLY"].link == "gr-olympiacos"
+    assert clubs["BAR"].link is None

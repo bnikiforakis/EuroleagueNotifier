@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, time
 from html import escape
 
+from euroleague_notifier import gbl
 from euroleague_notifier.models import (
     REGULATION_PERIODS,
     BoxScore,
@@ -39,8 +40,10 @@ def game_url(game: Game, competition: str) -> str | None:
     """Official game-center page, e.g. ``.../euroleague/game-center/2026-27/<home>-<away>/E2026/31/``.
 
     Slugs are the clubs' full names lowercased and hyphenated. EuroCup uses the same pattern under
-    ``/eurocup/``; other competitions return ``None``.
+    ``/eurocup/``; the GBL links esake's game page; other competitions return ``None``.
     """
+    if competition == gbl.COMPETITION:
+        return gbl.game_url(game)
     path = COMPETITION_PATHS.get(competition)
     year = re.search(r"\d{4}", game.season)
     if not path or not year:

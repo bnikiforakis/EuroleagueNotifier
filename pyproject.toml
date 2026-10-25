@@ -36,6 +36,11 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# GBL sources and highlights titles are Greek: their letters aren't look-alikes here.
+"src/euroleague_notifier/{gbl,highlights}.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_{gbl,highlights}.py" = ["RUF001", "RUF002", "RUF003"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

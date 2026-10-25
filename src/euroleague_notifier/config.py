@@ -62,6 +62,8 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         raise SystemExit(
             f"SCORE_COMMAND must be a lowercase Telegram command, got {settings.score_command!r}"
         )
+    if "G" in settings.competitions and len(settings.competitions) > 1:
+        raise SystemExit("COMPETITIONS=G (GBL) has its own data source and must run on its own")
     if not 0 < len(settings.project_name) <= 40:
         raise SystemExit("PROJECT_NAME must be 1-40 characters")
     return settings

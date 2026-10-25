@@ -58,9 +58,44 @@ services:
         max-size: 10m
         max-file: "3"
 
+  # The Greek Basket League (ADR-023): same code with GBL sources (COMPETITIONS=G), its own
+  # PiButler project ("GBL" in /settings), key, database and /gbl command. Its schedule goes out
+  # before the earliest weekend tip-off (13:00) and its results before EuroLeague's.
+  gbl-notifier:
+    build: .
+    image: euroleague-notifier:latest
+    container_name: gbl-notifier
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_PATH: /data/gbl_notifier.db
+      COMPETITIONS: G
+      PIBUTLER_PROJECT_ID: gbl
+      PIBUTLER_API_KEY: ${GBL_PIBUTLER_API_KEY:?set GBL_PIBUTLER_API_KEY in .env}
+      PROJECT_NAME: GBL
+      SCORE_COMMAND: gbl
+      CALLBACK_URL: http://gbl-notifier:8081/pibutler
+      DIGEST_TIME: ${GBL_DIGEST_TIME:-11:30}
+      RESULTS_TIME: ${GBL_RESULTS_TIME:-00:30}
+    volumes:
+      - gbl-data:/data
+    tmpfs:
+      - /tmp
+    expose:
+      - "8081"
+    networks:
+      - pibutler-net
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 volumes:
   notifier-data:
   eurocup-data:
+  gbl-data:
 
 networks:
   pibutler-net:

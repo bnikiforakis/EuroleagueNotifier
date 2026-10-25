@@ -12,6 +12,7 @@ from euroleague_notifier.api import EuroleagueClient
 from euroleague_notifier.butler import ButlerClient
 from euroleague_notifier.commands import Scoreboard, callback_path, create_app
 from euroleague_notifier.config import Settings, load_settings
+from euroleague_notifier.gbl import GblClient
 from euroleague_notifier.store import EventStore
 from euroleague_notifier.tracker import Notifier
 
@@ -24,8 +25,10 @@ async def run() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
     events = await EventStore.open(settings.db_path)
+    # The GBL comes from other sources behind the same interface (ADR-023).
+    source = GblClient(settings.season_year) if settings.competitions == ("G",) else EuroleagueClient()
     async with (
-        EuroleagueClient() as euroleague,
+        source as euroleague,
         ButlerClient(settings.pibutler_url, settings.pibutler_api_key, settings.project_id) as butler,
     ):
         # Docker's healthcheck looks at this file's age (see Dockerfile).

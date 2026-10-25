@@ -20,6 +20,8 @@ class Club:
     code: str
     name: str
     short_name: str
+    aliases: tuple[str, ...] = ()  # other names, e.g. the Greek ones highlights titles use
+    link: str | None = None  # the same club in other competitions shares it (ADR-024)
 
 
 @dataclass(frozen=True)

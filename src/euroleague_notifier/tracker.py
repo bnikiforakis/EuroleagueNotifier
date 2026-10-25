@@ -71,7 +71,10 @@ def build_manifest(clubs: list[Club], name: str, command: str, callback_url: str
                 "key": "teams",
                 "label": "Auto-follow teams",
                 "default": [],  # not "All": auto-following everything would follow every game
-                "options": [{"value": c.code, "label": c.short_name} for c in unique],
+                "options": [
+                    {"value": c.code, "label": c.short_name} | ({"link": c.link} if c.link else {})
+                    for c in unique
+                ],
             },
             {
                 # "daily", not the old "kind": selections saved for the old start/final options
