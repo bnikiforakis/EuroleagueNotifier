@@ -237,6 +237,7 @@ async def test_register_builds_manifest_from_clubs(events):
     assert daily["key"] == "daily"  # a new key: old "kind" selections can't hide the results
     assert len(teams["options"]) == 20 and teams["default"] == [] and "all_label" not in teams
     assert daily["default"] == ["schedule", "results", "weekly"]
+    assert daily["options"][2]["link"] == "weekly-schedule"  # one switch in every competition
 
 
 def test_manifest_dedupes_clubs_across_competitions():

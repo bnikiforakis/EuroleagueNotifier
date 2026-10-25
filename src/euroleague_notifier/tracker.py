@@ -29,7 +29,8 @@ log = logging.getLogger(__name__)
 KINDS = [
     {"value": "schedule", "label": "Daily schedule"},
     {"value": "results", "label": "Nightly results"},
-    {"value": "weekly", "label": "Weekly team schedule"},
+    # One switch in every competition: a team's week can come from another one's project (ADR-025).
+    {"value": "weekly", "label": "Weekly team schedule", "link": "weekly-schedule"},
 ]
 RESULTS_WINDOW = timedelta(hours=11)  # after RESULTS_TIME; later than that the summary is stale
 RESULTS_PATIENCE = timedelta(hours=2)  # how long the summary waits for an unfinished or missing game
