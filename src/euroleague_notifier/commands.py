@@ -256,7 +256,7 @@ class Scoreboard:
             lines = [f"🔴 {reports.score_line(game, home, away, bold_both=True)}", _clock_line(header)]
         else:
             score = reports.score_line(game, home, away, bold_winner=True)
-            lines = [f"✅ <b>Final</b>{reports.ot_suffix(len(periods))} · {score}"]
+            lines = [f"🏁 <b>Final</b>{reports.ot_suffix(len(periods))} · {score}"]
         if periods:
             lines += ["", _periods_line(periods, exact=box is not None)]
         if status.state == "final" and competition in highlights.CHANNELS:
@@ -318,9 +318,9 @@ class Scoreboard:
         if status.state == "live" and status.header:
             return _fit("🔴 ", f"{reports.plain_score(game, *status.score)} · {_clock(status.header)}")
         if status.state == "final" and status.score:
-            return _fit("✅ ", reports.plain_score(game, *status.score))
+            return _fit("", reports.result_score(game, *status.score))
         if status.state == "final":
-            return _fit("✅ ", names)
+            return _fit("🏁 ", names)
         return _fit(("⏳ " if status.state == "upcoming" else "🏀 ") + hm, names)
 
     async def _header(self, game: Game) -> LiveHeader | None:

@@ -181,8 +181,8 @@ async def test_score_lists_todays_games_by_tipoff(make):
     reply = await s.command()
     assert reply["text"] == "🏀 <b>Today's EuroLeague games</b>\n\nTap a game for the live score."
     assert labels(reply) == [
-        f"✅ Maccabi 96{DASH}98 Milan",
-        f"✅ Dubai 96{DASH}98 Crvena Zvezda",
+        f"Maccabi 96{DASH}98 Milan 🏆",
+        f"Dubai 96{DASH}98 Crvena Zvezda 🏆",
         f"🔴 Bayern Munich 45{DASH}41 Virtus Bologna · Q4 01:00",
         f"🔴 Panathinaikos 45{DASH}41 Fenerbahce · Q3 05:12",
         f"⏳ {{{{hm:2026-10-08T18:30:00Z}}}} Valencia {DASH} Hapoel TLV",
@@ -201,7 +201,7 @@ async def test_break_shows_break_instead_of_clock(make):
 async def test_finished_from_event_store_even_if_header_still_live(make):
     s = await make()
     await s.events.add(f"{BY_CODE[36].identifier}:final")
-    assert f"✅ Panathinaikos 45{DASH}41 Fenerbahce" in labels(await s.command())
+    assert f"🏆 Panathinaikos 45{DASH}41 Fenerbahce" in labels(await s.command())
 
 
 async def test_today_is_the_users_date_and_live_games_from_yesterday_stay(make):
@@ -271,7 +271,7 @@ async def test_finished_game_view(make):
     s = await make()
     reply = await s.action("g|37")
     assert reply["text"] == (
-        f"✅ <b>Final</b> · Dubai 96{DASH}98 <b>Crvena Zvezda</b>\n\n"
+        f"🏁 <b>Final</b> · Dubai 96{DASH}98 <b>Crvena Zvezda</b>\n\n"
         f"Q1 21{DASH}14 · Q2 22{DASH}32 · Q3 34{DASH}28 · Q4 19{DASH}24"
     )
     assert actions(reply) == [["s|37", "g|37"], ["l"]]
@@ -307,7 +307,7 @@ async def test_game_card_from_the_results_stays_on_that_game(make):
     s = await make()
     await s.events.add_highlight(BY_CODE[37].identifier, "2kMCaWkCCK8")
     reply = await s.action("r|37")
-    assert reply["text"].startswith("✅ <b>Final</b>")
+    assert reply["text"].startswith("🏁 <b>Final</b>")
     assert targets(reply) == [["t|37", "https://www.youtube.com/watch?v=2kMCaWkCCK8"], ["r|37"]]  # no Back
     assert actions(await s.action("t|37")) == [["t|37", "r|37"]]  # its stats lead back to this card
 

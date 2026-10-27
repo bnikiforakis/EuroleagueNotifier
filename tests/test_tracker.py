@@ -482,7 +482,7 @@ async def test_nightly_results_after_one_am_with_a_game_card_button_per_game(eve
     assert msg["silent"] and msg["tags"] == {"daily": ["results"]} and msg.get("audience") is None
     assert "EuroLeague results</b> · Thu 8 Oct" in msg["text"]  # the games' day, not "today"
     (first,), (second,) = msg["buttons"]
-    assert first["label"].startswith(f"✅ {GAME.home.short_name} ")  # in tip-off order
+    assert GAME.home.short_name in first["label"] and "🏆" in first["label"]  # in tip-off order
     # opens the live game card (score, stats, highlights once found) through the callback
     assert (first["action"], second["action"]) == ("r|99", "r|98")
     assert "score, stats and highlights" in msg["text"]

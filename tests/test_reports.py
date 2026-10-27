@@ -15,6 +15,8 @@ from euroleague_notifier.reports import (
     iso_z,
     quarter_report,
     reminder,
+    result_label,
+    result_score,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -189,6 +191,14 @@ def test_compact_cards_hold_score_and_periods_but_no_tables():
     final = final_card(game, box)
     assert final.startswith("🏁 <b>Final</b> · Paris 96") and "Q4 19" in final
     assert "<pre>" not in card + final
+
+
+def test_result_labels_put_the_trophy_on_the_winners_side():
+    game = double_ot_game()
+    box = parse_boxscore(load("live_Boxscore_E2025_340.json"))
+    assert result_label(game, box) == f"🏆 Partizan 110{DASH}104 Valencia (2OT)"
+    assert result_score(game, 80, 88) == f"Partizan 80{DASH}88 Valencia 🏆"
+    assert result_score(game, 70, 70) == f"Partizan 70{DASH}70 Valencia"
 
 
 def test_tables_are_labelled_boxes():

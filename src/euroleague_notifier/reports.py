@@ -145,6 +145,16 @@ def plain_score(game: Game, home_score: int, away_score: int) -> str:
     return f"{game.home.short_name} {home_score}{DASH}{away_score} {game.away.short_name}"
 
 
+def result_score(game: Game, home_score: int, away_score: int) -> str:
+    """Final score with 🏆 on the winner's side: ``🏆 Panathinaikos 88-80 Fenerbahce``.
+
+    For button labels, which can't be bold."""
+    score = plain_score(game, home_score, away_score)
+    if home_score > away_score:
+        return f"🏆 {score}"
+    return f"{score} 🏆" if away_score > home_score else score
+
+
 def box_sections(game: Game, box: BoxScore, scores: list[tuple[int, int]], stats: list[StatRow]) -> list[str]:
     """Period table, top scorers and team stats, as message lines."""
     return [
@@ -301,5 +311,5 @@ def highlights(game: Game) -> str:
 
 
 def result_label(game: Game, box: BoxScore) -> str:
-    """Button label such as ``✅ PAN 88-80 FEN (OT)`` (en dash)."""
-    return f"✅ {plain_score(game, box.home.points, box.away.points)}{ot_suffix(len(box.quarter_scores))}"
+    """Button label such as ``🏆 Panathinaikos 88-80 Fenerbahce (OT)`` (en dash)."""
+    return f"{result_score(game, box.home.points, box.away.points)}{ot_suffix(len(box.quarter_scores))}"
